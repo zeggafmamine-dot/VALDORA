@@ -19,7 +19,7 @@ Funda una aldea con ocho habitantes. Construye un campo y una cabaña recolector
 - B: casa. F: campo. WASD o flechas: mover la cámara.
 - En móvil, botón Construir y gestos de arrastre.
 
-El mundo es finito, de 64 × 64 casillas, y reproducible por semilla. Cada estación tiene 30 días. Un día equivale a 2,5 segundos de simulación a velocidad 1×. El juego incluye edificios con trabajadores, costes, construcción, cultivos estacionales, recolección, pesca, pastos, recursos forestales, cantera, viviendas, almacenes, pozo, mercado, caminos y puentes. Los aldeanos tienen rutas visuales; la producción se calcula diariamente por edificio, sin simular cadenas individuales de transporte.
+Cada región jugable tiene 64 × 64 casillas. El generador procedural crea relieve, montañas, bosques y agua a partir de una semilla y coordenadas globales X/Y (cada paso de coordenada desplaza una región completa). La misma combinación de semilla y coordenadas reproduce el mismo mapa. En «Nuevo valle» puedes escoger X/Y y consultar una vista previa antes de fundar tu aldea; los guardados antiguos se cargan con su terreno original. No existe desplazamiento entre regiones durante una misma partida. Cada estación tiene 30 días. Un día equivale a 2,5 segundos de simulación a velocidad 1×. El juego incluye edificios con trabajadores, costes, construcción, cultivos estacionales, recolección, pesca, pastos, recursos forestales, cantera, viviendas, almacenes, pozo, mercado, caminos y puentes. Los aldeanos tienen rutas visuales; la producción se calcula diariamente por edificio, sin simular cadenas individuales de transporte.
 
 El guardado automático utiliza localStorage y ocurre cada 20 segundos. El menú permite guardar, exportar e importar JSON, y empezar una partida con otra semilla. Al recuperar una partida, el tiempo comienza pausado. No hay progreso mientras el juego está cerrado.
 
@@ -28,6 +28,7 @@ El guardado automático utiliza localStorage y ocurre cada 20 segundos. El menú
 - `dist/index.html`: estructura y controles accesibles.
 - `dist/style.css`: interfaz adaptable a pantalla.
 - `dist/sim.mjs`: simulación determinista, generación de terreno y guardado.
+- `dist/terrain.mjs`: muestreo continuo de relieve procedural en coordenadas globales X/Y.
 - `dist/render3d.mjs`: terreno con relieve, cámara en perspectiva, agua animada, luces, sombras, follaje instanciado y selección con rayos.
 - `dist/models3d.mjs`: texturas, casas, árboles, aldeanos, ovejas y otros modelos.
 - `dist/vendor/`: Three.js r180 y su licencia MIT.
