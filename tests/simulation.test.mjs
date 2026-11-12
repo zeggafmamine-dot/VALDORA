@@ -69,3 +69,37 @@ test('paths cross completed bridges and avoid water',()=>{
  assert.ok(path.every(p=>w.passable(p.x,p.y)));
  const water=w.tiles.find(t=>t.type==='water');assert.deepEqual(w.findPath(31,32,water.x,water.y),[]);
 });
+
+test('coordinates generate distinct, reproducible worlds and preserve a playable starting area',()=>{
+ const seed='GEOGRAFIA-42';
+ const sameA=new World(seed,null,{x:14,y:-7}),sameB=new World(seed,null,{x:14,y:-7});
+ const moved=new World(seed,null,{x:15,y:-7});
+ const terrain=w=>w.tiles.map(t=>[t.type,t.height,t.tree,t.rock,t.variant]);
+ assert.deepEqual(terrain(sameA),terrain(sameB));
+ assert.notDeepEqual(terrain(sameA),terrain(moved));
+ for(const w of [sameA,moved]){
+  assert.equal(w.tiles.length,SIZE*SIZE);
+  for(const b of w.buildings)for(let y=b.y;y<b.y+b.h;y++)for(let x=b.x;x<b.x+b.w;x++)assert.equal(w.tile(x,y).type,'grass');
+  assert.deepEqual(w.coordinates,w===sameA?{x:14,y:-7}:{x:15,y:-7});
+ }
+});
+
+test('new procedural saves retain coordinates and older saves remain compatible',()=>{
+ const original=new World('GEOGRAFIA',null,{x:-11,y:48});
+ const snapshot=JSON.parse(JSON.stringify(original.serialize()));
+ const restored=new World(snapshot.seed,snapshot);
+ assert.deepEqual(restored.coordinates,{x:-11,y:48});
+ assert.equal(restored.terrainVersion,2);
+ assert.deepEqual(restored.tiles.map(t=>t.type),original.tiles.map(t=>t.type));
+ assert.equal(restored.speed,0);
+ const old={...snapshot};delete old.terrainVersion;delete old.coordinates;
+ const legacy=new World(old.seed,old);
+ assert.equal(legacy.terrainVersion,1);
+ assert.deepEqual(legacy.coordinates,{x:0,y:0});
+ assert.equal(legacy.tiles.length,SIZE*SIZE);
+});
+
+test('invalid world coordinates are rejected instead of silently corrupting terrain',()=>{
+ for(const coords of [{x:1.5,y:0},{x:NaN,y:1},{x:1000001,y:0},{x:0,y:Infinity}])assert.throws(()=>new World('X',null,coords));
+ const save=new World().serialize();save.coordinates={x:1.2,y:0};assert.throws(()=>new World(save.seed,save));
+});
