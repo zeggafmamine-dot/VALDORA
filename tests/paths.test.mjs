@@ -17,12 +17,22 @@ test('blocked or unaffordable lines do not build partial paths or deduct resourc
  const w=new World(),before=structuredClone(w.serialize());let result=w.placeLine('road',{x:27,y:35},{x:36,y:35});assert.equal(result.ok,false);assert.deepEqual(w.resources,before.resources);assert.equal(w.tile(27,35).road,false);
  w.resources.stone=2;result=w.placeLine('road',{x:25,y:38},{x:36,y:38});assert.equal(result.ok,false);assert.equal(w.resources.stone,2);assert.equal(w.tile(25,38).road,false);
 });
-test('a whole bridge spans the river, includes approaches and survives saving',()=>{
- const w=new World(),y=32,water=w.tiles.filter(t=>t.y===y&&t.type==='water'),start={x:water[0].x-1,y},end={x:water.at(-1).x+1,y};
- const old=w.resources.wood,plan=w.previewLine('bridge',start,end);assert.ok(plan.ok,plan.reason);assert.equal(w.previewLine('bridge',start,{x:water[0].x,y}).ok,false);
- const result=w.placeLine('bridge',start,end);assert.ok(result.ok);assert.equal(w.resources.wood,old-result.count*6);assert.ok(result.cells.every(c=>w.tile(c.x,c.y).bridge));assert.ok(w.findPath(start.x,start.y,end.x,end.y).length>0);
- const data=JSON.parse(JSON.stringify(w.serialize())),restored=new World(data.seed,data);assert.ok(result.cells.every(c=>restored.tile(c.x,c.y).bridgeAxis==='x'));assert.ok(restored.findPath(start.x,start.y,end.x,end.y).length>0);
+test('a whole bridge spans procedural water, includes approaches and survives saving',()=>{
+ const w=new World('VALDORA-2048',null,{x:-1,y:0});let start,end,plan;
+ for(let y=1;y<63&&!plan;y++)for(let x=1;x<60&&!plan;x++)for(let e=x+2;e<Math.min(63,x+11);e++){
+  const p=w.previewLine('bridge',{x,y},{x:e,y});
+  if(p.ok){start={x,y};end={x:e,y};plan=p;break;}
+ }
+ assert.ok(plan,'Debería encontrarse un tramo corto de río que pueda cruzarse');
+ assert.ok(plan.cells.some(c=>w.tile(c.x,c.y).type==='water'));
+ const old=w.resources.wood;
+ const result=w.placeLine('bridge',start,end);assert.ok(result.ok);assert.equal(w.resources.wood,old-result.count*6);
+ assert.ok(result.cells.every(c=>w.tile(c.x,c.y).bridge));assert.ok(w.findPath(start.x,start.y,end.x,end.y).length>0);
+ const data=JSON.parse(JSON.stringify(w.serialize())),restored=new World(data.seed,data);
+ assert.deepEqual(restored.coordinates,{x:-1,y:0});assert.ok(result.cells.every(c=>restored.tile(c.x,c.y).bridgeAxis==='x'));
+ assert.ok(restored.findPath(start.x,start.y,end.x,end.y).length>0);
 });
+
 test('roads do not create bridges implicitly and invalid drags are rejected',()=>{
  const w=new World(),water=w.tiles.find(t=>t.y===32&&t.type==='water');assert.equal(w.previewLine('road',{x:water.x-2,y:32},{x:water.x+3,y:32}).ok,false);
  assert.equal(w.previewLine('bridge',{x:25,y:38},{x:36,y:38}).ok,false);assert.equal(w.previewLine('road',{x:-1,y:0},{x:3,y:0}).ok,false);
