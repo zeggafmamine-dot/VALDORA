@@ -1,4 +1,5 @@
 import {planLine} from './paths.mjs';
+import {terrainSample,validCoordinates,REGION_SIZE} from './terrain.mjs';
 export const SIZE=64;
 export const SEASONS=[{name:'Primavera',short:'Prim.',temperature:14,color:'#a2bf76'},{name:'Verano',short:'Ver.',temperature:24,color:'#e7bd6b'},{name:'Otoño',short:'Oto.',temperature:10,color:'#c98e55'},{name:'Invierno',short:'Inv.',temperature:-5,color:'#b8d0dc'}];
 export const RESOURCES={wood:{name:'Madera',icon:'wood',color:'#c5a584'},stone:{name:'Piedra',icon:'stone',color:'#bcc4ca'},food:{name:'Alimentos',icon:'food',color:'#d9bf76'},firewood:{name:'Leña',icon:'fire',color:'#e6a06f'}};
@@ -23,7 +24,9 @@ function seedHash(s){let n=2166136261;for(const c of String(s)){n^=c.charCodeAt(
 function smooth(x,y,seed){const a=Math.floor(x),b=Math.floor(y),u=(x-a)**2*(3-2*(x-a)),v=(y-b)**2*(3-2*(y-b));return (hash(a,b,seed)*(1-u)+hash(a+1,b,seed)*u)*(1-v)+(hash(a,b+1,seed)*(1-u)+hash(a+1,b+1,seed)*u)*v;}
 const NAMES=['Elena','Mateo','Inés','Bruno','Alba','Nicolás','Clara','Tomás','Vera','Hugo','Lía','Gabriel','Nora','Leo','Sara','Iván','Emma','Adrián','Mara','Lucas','Aina','Amir','Noa','Oliver'];
 export class World{
- constructor(seed='VALDORA-2048',restored=null){
+ constructor(seed='VALDORA-2048',restored=null,coordinates={x:0,y:0}){
+  this.terrainVersion=restored?(restored.terrainVersion===2?2:1):2;this.coordinates=this.terrainVersion===2?(restored?restored.coordinates:coordinates):{x:0,y:0};
+  if(this.terrainVersion===2&&!validCoordinates(this.coordinates))throw Error('Coordenadas no válidas');
   this.seed=String(seed);this.seedNumber=seedHash(seed);this.day=1;this.year=1;this.season=0;this.resources={wood:160,stone:90,food:220,firewood:75};this.health=100;this.happiness=85;this.speed=1;this.lastSpeed=1;this.nextId=1;this.buildings=[];this.citizens=[];this.events=[];this.gatherQueue=[];this.milestones=[];this.history=[];this.starveDays=0;this.coldDays=0;this.gameOver=false;this.won=false;this.totalDays=0;this.tiles=[];this.production={wood:0,stone:0,food:0,firewood:0};this.generate();
   if(restored){this.restore(restored);return;}
   this.addInitial('hall',29,29);this.addInitial('warehouse',32,29);this.addInitial('house',28,34);this.addInitial('house',32,34);
@@ -33,11 +36,23 @@ export class World{
   this.log('Ocho colonos han llegado al valle. Su futuro está en tus manos.','welcome');
   this.log('Empieza con un campo de cultivo y una cabaña recolectora.','info');this.assignJobs();
  }
- generate(){for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
+ generate(){
+  if(this.terrainVersion===2){this.generateProcedural();return;}
+  for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
   const noise=smooth(x/9,y/9,this.seedNumber),r=hash(x,y,this.seedNumber),center=44+Math.sin(y/7+this.seedNumber%6)*2.4+Math.cos(y/15)*2,river=Math.abs(x-center),lake=((x-46)/6)**2+((y-49)/7)**2;
   const water=river<1.8||lake<1,hill=(noise>.59&&x<23&&y<26)||(x<10&&y<14&&noise>.4),clear=Math.hypot(x-31,y-33)<8;
   this.tiles.push({x,y,type:water?'water':hill?'hill':'grass',height:water?0:hill?7+Math.floor(noise*16):Math.floor(noise*3),variant:r,tree:!water&&!hill&&!clear&&r>(noise>.4?.35:.72),rock:!water&&!clear&&(hill?r>.45:r>.96),road:false,bridge:false,building:null,marked:false});
  }}
+ generateProcedural(){
+  for(let y=0;y<REGION_SIZE;y++)for(let x=0;x<REGION_SIZE;x++){
+   const ground=terrainSample(x+.5,y+.5,this.seedNumber,this.coordinates);
+   const gx=this.coordinates.x*REGION_SIZE+x,gy=this.coordinates.y*REGION_SIZE+y;
+   const r=hash(gx,gy,this.seedNumber),clear=Math.hypot(x-31.5,y-32.5)<9.5;
+   const type=ground.water?'water':ground.hill?'hill':'grass';
+   const density=(.17+ground.moisture*.64)*(ground.height>1.5?.55:1);
+   this.tiles.push({x,y,type,height:ground.water?0:ground.hill?7+Math.floor(ground.height*2):Math.max(0,Math.floor(ground.height*1.3)),variant:r,tree:type==='grass'&&!clear&&r<density,rock:!ground.water&&!clear&&(ground.hill?r>.35:r>.97),road:false,bridge:false,building:null,marked:false});
+  }
+ }
  tile(x,y){x=Math.floor(x);y=Math.floor(y);return x>=0&&y>=0&&x<SIZE&&y<SIZE?this.tiles[y*SIZE+x]:null;}
  addInitial(type,x,y){const d=BUILDINGS[type],b={id:this.nextId++,type,x,y,w:d.w,h:d.h,progress:1,workers:0,paused:false};this.buildings.push(b);this.occupy(b);return b;}
  occupy(b){for(let dy=0;dy<b.h;dy++)for(let dx=0;dx<b.w;dx++){let t=this.tile(b.x+dx,b.y+dy);if(t){t.building=b.id;t.tree=false;t.rock=false;t.road=false;t.marked=false;}}}
@@ -123,9 +138,9 @@ export class World{
    if(b&&hash(c.id,Math.floor(time/4))>.3){tx=b.x+b.w;ty=b.y+b.h-1;}else{const r=hash(c.id+Math.floor(time/3),this.totalDays,this.seedNumber);tx=26+Math.floor(r*12);ty=28+Math.floor(hash(c.id,Math.floor(time/2))*11);}
    c.path=this.findPath(c.x,c.y,tx,ty);c.wait=c.path.length?0:2;
   }}
- serialize(){return {version:1,seed:this.seed,day:this.day,year:this.year,season:this.season,resources:this.resources,health:this.health,happiness:this.happiness,nextId:this.nextId,buildings:this.buildings,citizens:this.citizens.map(c=>({...c,path:[]})),events:this.events,gatherQueue:this.gatherQueue,milestones:this.milestones,history:this.history,totalDays:this.totalDays,starveDays:this.starveDays,coldDays:this.coldDays,gameOver:this.gameOver,won:this.won,tiles:this.tiles.map(t=>({tree:t.tree,rock:t.rock,road:t.road,bridge:t.bridge,bridgeAxis:t.bridgeAxis,marked:t.marked}))};}
+ serialize(){return {version:1,terrainVersion:this.terrainVersion,coordinates:this.coordinates,seed:this.seed,day:this.day,year:this.year,season:this.season,resources:this.resources,health:this.health,happiness:this.happiness,nextId:this.nextId,buildings:this.buildings,citizens:this.citizens.map(c=>({...c,path:[]})),events:this.events,gatherQueue:this.gatherQueue,milestones:this.milestones,history:this.history,totalDays:this.totalDays,starveDays:this.starveDays,coldDays:this.coldDays,gameOver:this.gameOver,won:this.won,tiles:this.tiles.map(t=>({tree:t.tree,rock:t.rock,road:t.road,bridge:t.bridge,bridgeAxis:t.bridgeAxis,marked:t.marked}))};}
  restore(data){const validInt=(n,min,max)=>Number.isInteger(n)&&n>=min&&n<=max;
-  if(data.version!==1||data.tiles?.length!==SIZE*SIZE||!Array.isArray(data.buildings)||data.buildings.length>SIZE*SIZE||!Array.isArray(data.citizens)||data.citizens.length>500||!data.resources||!Object.keys(RESOURCES).every(k=>Number.isFinite(data.resources[k])&&data.resources[k]>=0)||!validInt(data.day,1,30)||!validInt(data.year,1,100000)||!validInt(data.season,0,3)||!validInt(data.nextId,1,10000000)||!validInt(data.totalDays,0,12000000)||![data.health,data.happiness].every(n=>Number.isFinite(n)&&n>=0&&n<=100))throw Error('Partida no válida');
+  if(data.version!==1||![undefined,1,2].includes(data.terrainVersion)||(data.terrainVersion===2&&!validCoordinates(data.coordinates))||data.tiles?.length!==SIZE*SIZE||!Array.isArray(data.buildings)||data.buildings.length>SIZE*SIZE||!Array.isArray(data.citizens)||data.citizens.length>500||!data.resources||!Object.keys(RESOURCES).every(k=>Number.isFinite(data.resources[k])&&data.resources[k]>=0)||!validInt(data.day,1,30)||!validInt(data.year,1,100000)||!validInt(data.season,0,3)||!validInt(data.nextId,1,10000000)||!validInt(data.totalDays,0,12000000)||![data.health,data.happiness].every(n=>Number.isFinite(n)&&n>=0&&n<=100))throw Error('Partida no válida');
   const ids=new Set();for(const b of data.buildings){const d=BUILDINGS[b.type];if(!d||!validInt(b.id,1,10000000)||ids.has(b.id)||b.w!==d.w||b.h!==d.h||!validInt(b.x,0,SIZE-b.w)||!validInt(b.y,0,SIZE-b.h)||!Number.isFinite(b.progress)||b.progress<0||b.progress>1||!validInt(b.workers,0,d.maxWorkers))throw Error('Edificio no válido');ids.add(b.id);}
   if(!data.citizens.every(c=>validInt(c.id,1,10000000)&&typeof c.name==='string'&&c.name.length<80&&validInt(c.age,0,150)&&Number.isFinite(c.x)&&Number.isFinite(c.y)&&c.x>=0&&c.x<SIZE&&c.y>=0&&c.y<SIZE&&/^#[0-9a-f]{6}$/i.test(c.color)))throw Error('Habitante no válido');
   if(!Array.isArray(data.events)||!data.events.every(e=>typeof e.text==='string'&&e.text.length<1000&&typeof e.date==='string'&&['info','welcome','success','danger','season','milestone'].includes(e.type))||!Array.isArray(data.gatherQueue)||!data.gatherQueue.every(q=>validInt(q.x,0,SIZE-1)&&validInt(q.y,0,SIZE-1)&&Number.isFinite(q.progress))||!Array.isArray(data.milestones)||!data.milestones.every(g=>['food','wood','winter','village'].includes(g))||!Array.isArray(data.history))throw Error('Partida no válida');
