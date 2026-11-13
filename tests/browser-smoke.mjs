@@ -111,8 +111,8 @@ try{
   const circle=renderer.quarryArea;
   return {
    visible:circle.visible,
-   fillVertices:renderer.quarryFill.geometry.getAttribute('position').count,
-   borderVertices:renderer.quarryBorder.geometry.getAttribute('position').count,
+   fillVertices:renderer.quarryFill.geometry.getAttribute('position')?.count||0,
+   borderVertices:renderer.quarryBorder.geometry.getAttribute('position')?.count||0,
    panelBox:panel.getBoundingClientRect().toJSON(),
    panelDisplay:getComputedStyle(panel).display,
    circleColor:renderer.quarryBorder.material.color.getHexString()
