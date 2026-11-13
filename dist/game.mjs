@@ -39,8 +39,8 @@ function toggleGather(){const active=renderer.gatherMode;cancelMode();closeSelec
 function showTooltip(e,title,description,detail=''){if(window.innerWidth<701||!$('modal-overlay').hidden)return;const t=$('tooltip');t.innerHTML=`<h4>${esc(title)}</h4><p>${esc(description)}</p><small>${esc(detail)}</small>`;t.hidden=false;const r=e.getBoundingClientRect();let x=r.right+12,y=r.top;if(r.top<90){x=r.left;y=r.bottom+12;}if(x+235>innerWidth)x=r.left-247;t.style.left=Math.max(8,x)+'px';t.style.top=Math.min(innerHeight-t.offsetHeight-10,y)+'px';}
 function hideTooltip(){$('tooltip').hidden=true;}
 function toast(msg,type='info'){const e=document.createElement('div');e.className='toast '+type;e.textContent=msg;$('toast-container').append(e);setTimeout(()=>e.remove(),3700);while($('toast-container').children.length>3)$('toast-container').firstChild.remove();}
-function selectBuilding(id){cancelMode();selected=id;renderer.selected=id;renderSelection();}
-function closeSelection(){selected=null;renderer.selected=null;$('selection-panel').hidden=true;$('quarry-inspector').hidden=true;}
+function selectBuilding(id){cancelMode();selected=id;renderer.selected=id;renderSelection();renderer.updateSelection?.();}
+function closeSelection(){selected=null;renderer.selected=null;$('selection-panel').hidden=true;$('quarry-inspector').hidden=true;renderer.updateSelection?.();}
 function renderSelection(){const b=world.buildings.find(b=>b.id===selected);if(!b){closeSelection();return;}const d=BUILDINGS[b.type],panel=$('selection-panel');
  const quarryReserve=b.type==='quarry'?world.stoneAround(b):null;
  const quarryState=b.type==='quarry'?(b.progress<1?'En construcción':quarryReserve===0?'Agotado':b.paused?'Pausada':b.workers===0?'Sin trabajadores':'En explotación'):null;
