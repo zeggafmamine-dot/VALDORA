@@ -1,7 +1,7 @@
 import * as T from './vendor/three.module.js';
 import {SIZE,BUILDINGS,hash} from './sim.mjs';
 import {terrainSample,REGION_SIZE} from './terrain.mjs';
-import {desiredChunks,visibilityTarget,approachOpacity,shouldRetire,chunkDistance,MAX_VISUAL_CHUNKS,CAMERA_DISTANCE,DEFAULT_GRAPHICS_QUALITY} from './stream-window.mjs';
+import {desiredChunks,visibilityTarget,approachOpacity,shouldRetire,chunkDistance,MAX_VISUAL_CHUNKS,CAMERA_DISTANCE,DEFAULT_GRAPHICS_QUALITY,renderDistanceForZoom} from './stream-window.mjs';
 import {makeMaterials,buildingModel,treeModel,constructionModel,citizenModel,animalModel,cube,beam,mergeByMaterial} from './models3d.mjs';
 import {installDetailedMaterials,makeTransport,routePreview,createPostprocessing,makeSky,makeRiver} from './visuals.mjs';
 
@@ -192,20 +192,21 @@ export class Renderer{
   const dt=this.lastVisualTime?Math.min(.1,Math.max(0,time-this.lastVisualTime)):.016;
   this.lastVisualTime=time;
   const wanted=desiredChunks(this.camera.x,this.camera.y);
+  const renderDistance=renderDistanceForZoom(this.zoom);
   // Horizonte ampliado por tandas: dos sectores de relieve sencillo
   // por fotograma si hay margen; solo uno cuando bajan los FPS.
   if(time-this.lastVisualBuild>.015){
    let budget=dt>.038?1:2;
    for(const next of wanted){
     if(!budget)break;
-    if(next.opacity<=.005||this.chunkVisuals.has(next.key))continue;
+    if(next.opacity<=.005||next.distance>renderDistance||this.chunkVisuals.has(next.key))continue;
     this.makeVisualChunk(next.x,next.y,0);
     budget--;
    }
    this.lastVisualBuild=time;
   }
   for(const chunk of [...this.chunkVisuals.values()]){
-   const target=shouldRetire(chunk.cx,chunk.cy,this.camera.x,this.camera.y)?0:
+   const target=(shouldRetire(chunk.cx,chunk.cy,this.camera.x,this.camera.y)||chunkDistance(chunk.cx,chunk.cy,this.camera.x,this.camera.y)>renderDistance)?0:
     visibilityTarget(chunk.cx,chunk.cy,this.camera.x,this.camera.y);
    chunk.opacity=approachOpacity(chunk.opacity,target,dt);
    if(Math.abs(chunk.opacity-target)<.001)chunk.opacity=target;
