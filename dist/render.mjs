@@ -54,7 +54,7 @@ export class Renderer{
   const corners=[this.unproject(-150,-200),this.unproject(this.width+150,-200),this.unproject(this.width+150,this.height+150),this.unproject(-150,this.height+150)];
   const lo=w.terrainVersion===3?-100000000:0,hi=w.terrainVersion===3?100000000:SIZE-1;const minX=Math.max(lo,Math.floor(Math.min(...corners.map(p=>p.x)))-2),maxX=Math.min(hi,Math.ceil(Math.max(...corners.map(p=>p.x)))+2),minY=Math.max(lo,Math.floor(Math.min(...corners.map(p=>p.y)))-2),maxY=Math.min(hi,Math.ceil(Math.max(...corners.map(p=>p.y)))+2);
   const objects=[];
-  for(let sum=minX+minY;sum<=maxX+maxY;sum++)for(let x=minX;x<=maxX;x++){const y=sum-x;if(y<minY||y>maxY)continue;const t=w.tile(x,y);this.drawTile(t,pal);if(t.tree)objects.push({depth:x+y+1,type:'tree',t});if(t.rock)objects.push({depth:x+y+1.1,type:'rock',t});if(t.type==='hill')objects.push({depth:x+y+.8,type:'hill',t});}
+  for(let sum=minX+minY;sum<=maxX+maxY;sum++)for(let x=minX;x<=maxX;x++){const y=sum-x;if(y<minY||y>maxY)continue;const t=w.tile(x,y);this.drawTile(t,pal);if(t.tree)objects.push({depth:x+y+1,type:'tree',t});if(t.rock)objects.push({depth:x+y+1.1,type:'rock',t});if(t.type==='hill'&&t.x%5===0&&t.y%5===0)objects.push({depth:x+y+.8,type:'hill',t});}
   for(const b of w.buildings)if(b.x>=minX-4&&b.x<=maxX&&b.y>=minY-4&&b.y<=maxY){this.drawGround(b);objects.push({depth:b.x+b.y+b.w+b.h-1,type:'building',b});}
   for(const v of w.citizens)if(v.x>=minX-2&&v.x<=maxX+2&&v.y>=minY-2&&v.y<=maxY+2)objects.push({depth:v.x+v.y+.08,type:'person',v});
   for(let i=0;i<9;i++){const x=21+hash(i,45,w.seedNumber)*14+Math.sin(time*.09+i)*.7,y=19+hash(i,8,w.seedNumber)*8+Math.cos(time*.07+i)*.6;if(w.tile(x,y)?.type==='grass'&&!w.tile(x,y)?.building)objects.push({depth:x+y+.1,type:'deer',x,y,i});}
@@ -73,7 +73,18 @@ export class Renderer{
    if(r>.42){const p=this.iso(x+.5,y+.5),s=Math.sin(this.time*.6+x+y);this.line([{x:p.x-9+s*2,y:p.y},{x:p.x+7+s*2,y:p.y}],edge?'#bed2ad55':'#bad3c133',.8);}
    if(t.bridge)this.drawBridge(t);return;
   }
-  const color=pal.grass[Math.min(5,Math.floor(r*6))];this.diamond(x,y,1.015,1.015,0,color);
+  const biomeColor=t.biome&&t.biome!=='water'?{
+    steppe:this.world.season===3?'#c0cbc0':'#b4ae73',
+    plain:this.world.season===3?'#c9d2c6':'#9ca97b',
+    meadow:this.world.season===3?'#c0d1bc':'#8faa6c',
+    woodland:this.world.season===3?'#aabfae':'#78935e',
+    forest:this.world.season===3?'#9fae9d':'#5a754b',
+    hills:this.world.season===3?'#adb9ae':'#81927c',
+    mountain:this.world.season===3?'#b9c5c0':'#999e93',
+    alpine:this.world.season===3?'#e7eee9':'#d1d8d0'
+   }[t.biome]:null;
+   const color=biomeColor||pal.grass[Math.min(5,Math.floor(r*6))];
+   this.diamond(x,y,1.015,1.015,0,color);
    if(t.stoneScar&&!t.building&&!t.road){this.diamond(x+.13,y+.13,.74,.74,.15,this.world.season===3?'#aaa99f':'#847e6d','#a39b8566');}
   if(t.type==='grass'&&r>.77&&!t.building&&!t.road){const p=this.iso(x+.4,y+.6);this.line([{x:p.x-3,y:p.y},{x:p.x-4,y:p.y-3}],pal.soil,.7);this.line([{x:p.x,y:p.y},{x:p.x+1,y:p.y-4}],pal.soil,.7);if(r>.94&&this.world.season!==3){this.ellipse(p.x+9,p.y-2,1.3,.9,'#d9d5a0');this.ellipse(p.x+5,p.y,1,.8,'#d9d5a0');}}
   if(t.road){this.diamond(x+.05,y+.05,.9,.9,1,this.world.season===3?'#b2bab0':'#b8af8c','#c1b99955');const p=this.iso(x+.5,y+.5);this.line([{x:p.x-8,y:p.y},{x:p.x+9,y:p.y-1}],'#8e937048',.6);}
@@ -136,7 +147,7 @@ export class Renderer{
   const key=`${w.season}-${ox},${oy}-${w.buildings.length}-${w.totalDays}-${this.buildMode}`;
   if(key!==this.miniKey){
    const ca=document.createElement('canvas');ca.width=SIZE;ca.height=SIZE;const ctx=ca.getContext('2d');
-   for(const t of w.tiles){ctx.fillStyle=t.building?'#d9c49b':t.bridge?'#baab83':t.type==='water'?'#7aabac':t.type==='hill'?'#b0b5a1':t.road?'#bcb18a':t.tree?p.pine[1]:p.grass[1];ctx.fillRect(t.x-ox,t.y-oy,1,1);}
+   for(const t of w.tiles){ctx.fillStyle=t.building?'#d9c49b':t.bridge?'#baab83':t.type==='water'?'#7aabac':t.type==='hill'?(t.biome==='alpine'?'#e0e7df':t.biome==='mountain'?'#999e99':'#a5afa2'):t.road?'#bcb18a':t.tree?p.pine[1]:t.biome==='steppe'?'#b7ae79':t.biome==='plain'?'#a2af84':t.biome==='meadow'?'#95a977':t.biome==='forest'?'#607a51':p.grass[1];ctx.fillRect(t.x-ox,t.y-oy,1,1);}
    this.miniCache=ca;this.miniKey=key;
   }
   c.imageSmoothingEnabled=false;c.drawImage(this.miniCache,0,0,160,160);

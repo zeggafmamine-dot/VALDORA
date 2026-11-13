@@ -50,7 +50,33 @@ export class Renderer{
   if(shore<1.2)h=lerp(-.75,h,smooth(-1,1.2,shore));
   return h;
  }
- makeTerrain(cx=null,cy=null){const chunk=Number.isInteger(cx)&&Number.isInteger(cy),res=chunk?20:224,span=chunk?64:224,ox=chunk?cx*SIZE:this.world.terrainVersion===3?this.world.viewRegion.x*SIZE:0,oz=chunk?cy*SIZE:this.world.terrainVersion===3?this.world.viewRegion.y*SIZE:0;const geo=new T.PlaneGeometry(span,span,res,res);geo.rotateX(-Math.PI/2);const p=geo.getAttribute('position'),colors=new Float32Array(p.count*3);for(let i=0;i<p.count;i++){const x=p.getX(i)+ox+32,z=p.getZ(i)+oz+32;p.setXYZ(i,x,this.heightAt(x,z),z);}geo.setAttribute('color',new T.BufferAttribute(colors,3));geo.computeVertexNormals();this.terrain=new T.Mesh(geo,this.materials.ground);if(chunk)this.terrain.userData.groundChunk={x:cx*SIZE,z:cy*SIZE,segments:res};this.terrain.receiveShadow=true;this.terrain.castShadow=false;(chunk?this.staticGroup:this.scene).add(this.terrain);this.colorTerrain();}
+ makeTerrain(cx=null,cy=null){
+  const chunk=Number.isInteger(cx)&&Number.isInteger(cy),res=chunk?20:224,span=chunk?64:224;
+  const ox=chunk?cx*SIZE:this.world.terrainVersion===3?this.world.viewRegion.x*SIZE:0;
+  const oz=chunk?cy*SIZE:this.world.terrainVersion===3?this.world.viewRegion.y*SIZE:0;
+  const geo=new T.PlaneGeometry(span,span,res,res);
+  geo.rotateX(-Math.PI/2);
+  const p=geo.getAttribute('position'),colors=new Float32Array(p.count*3);
+  const landscape=this.world.terrainVersion===3?{woodland:new Float32Array(p.count),moisture:new Float32Array(p.count)}:null;
+  for(let i=0;i<p.count;i++){
+   const x=p.getX(i)+ox+32,z=p.getZ(i)+oz+32;
+   let height;
+   if(landscape){
+    const sample=terrainSample(x,z,this.world.seedNumber,this.world.coordinates);
+    height=sample.height;
+    landscape.woodland[i]=sample.woodland;
+    landscape.moisture[i]=sample.moisture;
+   }else height=this.heightAt(x,z);
+   p.setXYZ(i,x,height,z);
+  }
+  geo.setAttribute('color',new T.BufferAttribute(colors,3));geo.computeVertexNormals();
+  this.terrain=new T.Mesh(geo,this.materials.ground);
+  if(chunk)this.terrain.userData.groundChunk={x:cx*SIZE,z:cy*SIZE,segments:res};
+  if(landscape)this.terrain.userData.landscape=landscape;
+  this.terrain.receiveShadow=true;this.terrain.castShadow=false;
+  (chunk?this.staticGroup:this.scene).add(this.terrain);
+  this.colorTerrain();
+ }
  // La altura de las plantas debe coincidir con los TRIÁNGULOS visibles,
  // no con la función ideal de relieve. Al bajar de 32 a 20 divisiones,
  // apoyarlas en heightAt() provocaba árboles flotantes desde ciertos ángulos.
@@ -69,7 +95,35 @@ export class Renderer{
    ?h00+(h10-h00)*fx+(h01-h00)*fz
    :h11+(h01-h11)*(1-fx)+(h10-h11)*(1-fz);
  }
- colorTerrain(){const p=this.terrain.geometry.getAttribute('position'),colors=this.terrain.geometry.getAttribute('color'),pal=seasonColors[this.world.season],grass=new T.Color(pal.grass),forest=new T.Color(pal.forest),bank=new T.Color(this.world.season===3?'#b6bdb2':'#a39c7c'),rock=new T.Color(this.world.season===3?'#c0c5bc':'#92958a'),color=new T.Color();for(let i=0;i<p.count;i++){const x=p.getX(i),z=p.getZ(i),h=p.getY(i),n=noise((x+(this.world.coordinates?.x||0)*(this.world.terrainVersion>=2?REGION_SIZE:0))*.22,(z+(this.world.coordinates?.y||0)*(this.world.terrainVersion===2?REGION_SIZE:0))*.22,this.world.seedNumber),fine=noise((x+(this.world.coordinates?.x||0)*(this.world.terrainVersion===2?REGION_SIZE:0))*.85,(z+(this.world.coordinates?.y||0)*(this.world.terrainVersion===2?REGION_SIZE:0))*.85,this.world.seedNumber+28);color.copy(grass).lerp(forest,n*.65).multiplyScalar(.92+fine*.2);if(h<.4)color.lerp(bank,clamp((.42-h)*1.9,0,1));if(h>2)color.lerp(rock,clamp((h-2)/4,0,.9));colors.setXYZ(i,color.r,color.g,color.b);}colors.needsUpdate=true;}
+ colorTerrain(){
+  const p=this.terrain.geometry.getAttribute('position'),colors=this.terrain.geometry.getAttribute('color');
+  const pal=seasonColors[this.world.season],landscape=this.terrain.userData.landscape;
+  const grass=new T.Color(pal.grass),forest=new T.Color(pal.forest);
+  const bank=new T.Color(this.world.season===3?'#b6bdb2':'#a39c7c');
+  const rock=new T.Color(this.world.season===3?'#c0c5bc':'#92958a');
+  const dry=new T.Color(this.world.season===3?'#bdc9bc':'#ad9c6a');
+  const summit=new T.Color(this.world.season===3?'#f0f2eb':'#d2d5ca');
+  const color=new T.Color(),seed=this.world.seedNumber;
+  for(let i=0;i<p.count;i++){
+   const x=p.getX(i),z=p.getZ(i),h=p.getY(i);
+   const gx=x+(this.world.coordinates?.x||0)*(this.world.terrainVersion>=2?REGION_SIZE:0);
+   const gz=z+(this.world.coordinates?.y||0)*(this.world.terrainVersion===2?REGION_SIZE:0);
+   const cover=landscape?landscape.woodland[i]:noise(gx*.22,gz*.22,seed);
+   const wet=landscape?landscape.moisture[i]:.5;
+   const fine=noise(gx*.85,gz*.85,seed+28);
+   // Grandes regiones abiertas son ocres y luminosas; los bosques son
+   // oscuros. Las montañas pasan a roca y nieve sin usar texturas nuevas.
+   const dark=clamp((cover-.37)*2.1,0,1);
+   const dryness=landscape?clamp((.48-cover)*2.5,0,1)*clamp((.69-wet)*2.2,0,1):0;
+   color.copy(grass).lerp(forest,dark*.80).multiplyScalar(.93+fine*.18);
+   if(dryness>0)color.lerp(dry,dryness*.82);
+   if(h<.4)color.lerp(bank,clamp((.42-h)*1.9,0,1));
+   if(h>1.8)color.lerp(rock,clamp((h-1.8)/10.5,0,.96));
+   if(h>13)color.lerp(summit,clamp((h-13)/9,0,this.world.season===3?1:.91));
+   colors.setXYZ(i,color.r,color.g,color.b);
+  }
+  colors.needsUpdate=true;
+ }
  makeWater(){this.river=makeRiver(this.gl,this.scene,this.heightAt.bind(this));this.water=this.river.mesh;}
  // La construcción procedural de un árbol es costosa. Los 3 modelos se
  // preparan una sola vez por renderizador y su geometría se comparte entre

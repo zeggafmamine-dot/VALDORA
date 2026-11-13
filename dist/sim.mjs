@@ -49,10 +49,19 @@ export class World{
  proceduralTile(x,y){
   const ground=terrainSample(x+.5,y+.5,this.seedNumber,this.coordinates);
   const gx=this.coordinates.x*REGION_SIZE+x,gy=this.coordinates.y*REGION_SIZE+y;
-  const r=hash(gx,gy,this.seedNumber),clear=Math.hypot(x-31.5,y-32.5)<9.5;
+  const r=hash(gx,gy,this.seedNumber),ore=hash(gx,gy,this.seedNumber+811);
+  const clear=Math.hypot(x-31.5,y-32.5)<9.5;
+  // biome es una categoría visual; los tipos grass/hill/water siguen
+  // funcionando con el guardado, las rutas y las reglas de construcción.
   const type=ground.water?'water':ground.hill?'hill':'grass';
-  const density=(.17+ground.moisture*.64)*(ground.height>1.5?.55:1);
-  const tile={x,y,type,height:ground.water?0:ground.hill?7+Math.floor(ground.height*2):Math.max(0,Math.floor(ground.height*1.3)),variant:r,tree:type==='grass'&&!clear&&r<density,rock:!ground.water&&!clear&&(ground.hill?r>.35:r>.97),road:false,bridge:false,building:this.buildingCells.get(x+','+y)||null,marked:false};tile.stoneLeft=tile.rock?stoneCapacity(tile):0;tile.stoneScar=false;return tile;
+  const tree=type==='grass'&&!clear&&r<ground.treeDensity;
+  const rock=!ground.water&&!clear&&!tree&&ore<ground.rockDensity;
+  const tile={x,y,type,biome:ground.biome,
+   height:ground.water?0:ground.hill?7+Math.floor(ground.height*2):Math.max(0,Math.floor(ground.height*1.3)),
+   variant:r,tree,rock,road:false,bridge:false,
+   building:this.buildingCells.get(x+','+y)||null,marked:false};
+  tile.stoneLeft=tile.rock?stoneCapacity(tile):0;tile.stoneScar=false;
+  return tile;
  }
  setViewRegion(x,y,force=false){
   if(this.terrainVersion!==3)return false;

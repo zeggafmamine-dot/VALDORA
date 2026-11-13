@@ -1,5 +1,6 @@
-// Coordenadas globales: cada región visible abarca 64 × 64 unidades.
-// La función es pura, continua en los bordes de regiones y determinista por semilla.
+// Terreno global y determinista: las regiones de 64×64 encajan sin costuras.
+// La cubierta vegetal, la geología y el relieve varían de manera continua;
+// no se elige un bosque o una montaña independientemente en cada casilla.
 export const REGION_SIZE=64;
 export const COORD_LIMIT=1000000;
 export function validCoordinates(coords){return !!coords&&Number.isInteger(coords.x)&&Number.isInteger(coords.y)&&Math.abs(coords.x)<=COORD_LIMIT&&Math.abs(coords.y)<=COORD_LIMIT;}
@@ -8,7 +9,10 @@ function noise(x,y,seed){const ax=Math.floor(x),ay=Math.floor(y),dx=x-ax,dy=y-ay
 const clamp01=x=>Math.max(0,Math.min(1,x));
 const fade=(a,b,x)=>{const t=clamp01((x-a)/(b-a));return t*t*(3-2*t);};
 
-// x/y pueden ser fraccionarios para el relieve 3D y valores enteros para las casillas.
+export const LANDSCAPE_BIOMES=Object.freeze(['steppe','plain','meadow','woodland','forest','hills','mountain','alpine','water']);
+
+// Se muestrea tanto en centros de casilla como en vértices de malla 3D.
+// Dos coordenadas cercanas siempre reciben un relieve cercano (sin escalones).
 export function terrainSample(x,y,seed,coordinates){
  const gx=coordinates.x*REGION_SIZE+x,gy=coordinates.y*REGION_SIZE+y;
  const warpX=(noise(gx/90,gy/90,seed+91)-.5)*36;
@@ -18,15 +22,43 @@ export function terrainSample(x,y,seed,coordinates){
  const foothills=noise(nx/29,ny/29,seed+29);
  const detail=noise(nx/9,ny/9,seed+43);
  const moisture=noise(nx/77,ny/77,seed+71);
- // Ríos que serpentean en vez de aparecer siempre en la misma columna.
- const stream=Math.abs(noise(nx/54,ny/54,seed+157)-.5);
- const bed=(1-fade(.016,.07,stream))*1.35;
+ const river=Math.abs(noise(nx/54,ny/54,seed+157)-.5);
+ const bed=(1-fade(.016,.07,river))*1.35;
+
+ // Cordilleras extensas (escala ~175), surcadas por crestas secundarias
+ // (~42). El contorno de montaña se desvanece suavemente hacia colinas.
+ const mountains=noise(nx/175,ny/175,seed+211);
+ const mountainStrength=fade(.48,.70,mountains);
+ const ridges=noise(nx/42,ny/42,seed+231);
  let height=.78+(continental-.5)*6.4+(foothills-.5)*2.6+(detail-.5)*.38-bed;
- // El centro mantiene espacio para el ayuntamiento, las viviendas y las vías iniciales.
+ height+=mountainStrength*(5+18*fade(.24,.80,ridges));
+
+ // La zona inicial sigue siendo llana para conservar las viviendas y vías.
  const clearing=fade(9,20,Math.hypot(x-31.5,y-32.5));
  height=.62+(height-.62)*clearing;
  const water=clearing>.65&&height<.035;
  height=water?Math.min(-.08,height):Math.max(.10,height);
- const hill=clearing>.92&&height>2.3;
- return {height,water,hill,moisture};
+ const hill=clearing>.92&&height>3.3;
+
+ // El arbolado tiene manchas grandes y graduales: estepas casi desnudas,
+ // llanuras abiertas, praderas, arboledas y bosques. No es una tirada
+ // uniforme de 40-50 % en cada casilla como en el generador anterior.
+ const woodland=noise(nx/132,ny/132,seed+307);
+ const treePotential=fade(.38,.80,woodland);
+ const treeDensity=water||hill?0:Math.min(.68,
+  (.008+.62*treePotential*treePotential)*(.62+.70*moisture)*(height>1.7?.72:1));
+ const rockBand=noise(nx/55,ny/55,seed+359);
+ const rockDensity=water?0:Math.min(.58,
+  .015+.41*fade(2.6,10.5,height)+.07*fade(.53,.83,rockBand));
+ let biome;
+ if(water)biome='water';
+ else if(height>=16)biome='alpine';
+ else if(height>=9)biome='mountain';
+ else if(height>=3.3)biome='hills';
+ else if(woodland<.34&&moisture<.48)biome='steppe';
+ else if(woodland<.46)biome='plain';
+ else if(woodland<.59)biome='meadow';
+ else if(woodland<.72)biome='woodland';
+ else biome='forest';
+ return {height,water,hill,moisture,woodland,treeDensity,rockDensity,biome,mountainStrength};
 }

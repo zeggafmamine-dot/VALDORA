@@ -204,6 +204,26 @@ try{
  assert.equal(performance.waterSpan,768);
  assert.equal(performance.lowWaterShader,1,'La calidad Ligera debe utilizar el shader simplificado del agua');
  assert.equal(performance.unnecessaryChunkReads,0,'No regenerar sectores intactos entre días');
+ const biomes3D=await page.evaluate(async()=>{
+  const {world,renderer}=window.__valdoraSmoke;
+  const {terrainSample}=await import('./terrain.mjs');
+  const t=renderer.chunkVisuals.get('0,0')?.terrain;
+  if(!t?.userData?.landscape)throw Error('No hay capas de bioma en los colores 3D.');
+  const data=t.userData.landscape,positions=t.geometry.getAttribute('position');
+  const origin={x:positions.getX(0),z:positions.getZ(0)};
+  const sample=terrainSample(origin.x,origin.z,world.seedNumber,world.coordinates);
+  const distant=terrainSample(450,450,world.seedNumber,world.coordinates);
+  const middle=world.tile(25,25);
+  return {layers:data.woodland.length,vertices:positions.count,
+   actualCover:data.woodland[0],expectedCover:sample.woodland,
+   actualHeight:positions.getY(0),expectedHeight:sample.height,
+   biome:middle.biome,distantBiome:distant.biome};
+ });
+ assert.equal(biomes3D.layers,biomes3D.vertices,'Todos los vértices tienen cubierta vegetal');
+ assert.ok(Math.abs(biomes3D.actualCover-biomes3D.expectedCover)<1e-6);
+ assert.ok(Math.abs(biomes3D.actualHeight-biomes3D.expectedHeight)<1e-4);
+ assert.ok(biomes3D.biome&&biomes3D.distantBiome);
+
 
  // La geometría de las copas se debe construir UNA sola vez, incluso si
  // aparecen varias regiones en la cámara.
