@@ -11,7 +11,18 @@ try{
  const is3d=await page.locator('body.graphics-3d').count();
  if(!is3d){const status=await page.locator('#graphics-status').innerText();console.error('Fallo WebGL:',status,'Errores:',errors);throw Error('El renderizador no inició WebGL 3D: '+status+' | '+errors.join(' | '));}
  await page.locator('#start-game').click();
- await page.waitForTimeout(1800);
+ // El primer arranque debe seleccionar calidad Ligera.
+ await page.locator('#settings-btn').click();
+ assert.equal(await page.locator('[data-quality="low"].active').count(),1,'El juego debe iniciar en calidad Ligera');
+ // El renderizado software de CI utiliza solo calidad Ligera; una segunda carga
+ // confirma que el ajuste predeterminado sigue aplicándose tras recuperar una partida.
+ await page.reload({waitUntil:'domcontentloaded',timeout:90000});
+ await page.waitForFunction(()=>!document.getElementById('world-loading'),{timeout:60000});
+ assert.equal(await page.locator('body.graphics-3d').count(),1,'La recarga debe conservar WebGL');
+ await page.locator('#settings-btn').click();
+ assert.equal(await page.locator('[data-quality="low"].active').count(),1,'Cada inicio debe restaurar calidad Ligera');
+ await page.locator('#menu-resume').click();
+ await page.waitForTimeout(1200);
  await page.keyboard.down('d');await page.waitForTimeout(1500);await page.keyboard.up('d');
  await page.keyboard.down('s');await page.waitForTimeout(1500);await page.keyboard.up('s');
  await page.waitForTimeout(1100);

@@ -6,6 +6,9 @@ on:
       - 'dist/**'
       - 'tests/browser-smoke.mjs'
   workflow_dispatch:
+concurrency:
+  group: valdora-webgl-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   chromium:
     runs-on: ubuntu-24.04
