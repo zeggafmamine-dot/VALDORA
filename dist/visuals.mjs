@@ -89,11 +89,23 @@ export function makeRiver(gl,scene,heightAt){
  const bedSize=80,span=768,bed=new T.DataTexture(new Uint8Array(bedSize*bedSize*4),bedSize,bedSize,T.RGBAFormat);bed.minFilter=bed.magFilter=T.LinearFilter;
  const bedOrigin=new T.Vector2(-24,-24);let mesh=null;
   function refreshBed(height,center={x:32,y:32}){const ox=center.x-span/2,oz=center.y-span/2;bedOrigin.set(ox,oz);if(mesh)mesh.position.set(center.x,.035,center.y);const data=bed.image.data;for(let z=0;z<bedSize;z++)for(let x=0;x<bedSize;x++){const h=height(ox+x/(bedSize-1)*span,oz+z/(bedSize-1)*span),i=(z*bedSize+x)*4;data[i]=Math.round(Math.max(0,Math.min(1,(h+1)/2))*255);data[i+1]=data[i+2]=0;data[i+3]=255;}bed.needsUpdate=true;}refreshBed(heightAt);
- const uniforms={uTime:{value:0},uCold:{value:0},uEye:{value:new T.Vector3()},uSky:{value:new T.Color('#adbab2')},uReflection:{value:reflection.texture},uReflectionMatrix:{value:new T.Matrix4()},uBed:{value:bed},uBedOrigin:{value:bedOrigin},uReflect:{value:1}};
+ const uniforms={uTime:{value:0},uCold:{value:0},uEye:{value:new T.Vector3()},uSky:{value:new T.Color('#adbab2')},uReflection:{value:reflection.texture},uReflectionMatrix:{value:new T.Matrix4()},uBed:{value:bed},uBedOrigin:{value:bedOrigin},uReflect:{value:1},uLow:{value:1}};
  const mat=new T.ShaderMaterial({uniforms,vertexShader:`varying vec3 vWorld;varying vec4 vReflect;uniform mat4 uReflectionMatrix;void main(){vec4 wp=modelMatrix*vec4(position,1.);vWorld=wp.xyz;vReflect=uReflectionMatrix*wp;gl_Position=projectionMatrix*viewMatrix*wp;}`,fragmentShader:`
- uniform float uTime;uniform float uCold;uniform vec3 uEye;uniform vec3 uSky;uniform sampler2D uReflection;uniform sampler2D uBed;uniform vec2 uBedOrigin;uniform float uReflect;varying vec3 vWorld;varying vec4 vReflect;
+ uniform float uTime;uniform float uCold;uniform vec3 uEye;uniform vec3 uSky;uniform sampler2D uReflection;uniform sampler2D uBed;uniform vec2 uBedOrigin;uniform float uReflect;uniform float uLow;varying vec3 vWorld;varying vec4 vReflect;
  float waves(vec2 p){return sin(p.x*7.7+p.y*3.3+uTime*.85)*.11+sin(p.y*12.1-p.x*4.2-uTime*1.1)*.065+sin(p.x*31.+p.y*19.+uTime*1.45)*.02;}
- void main(){vec2 p=vWorld.xz;float w=waves(p);float dx=(waves(p+vec2(.025,0.))-w)/.025;float dz=(waves(p+vec2(0.,.025))-w)/.025;vec3 normal=normalize(vec3(-dx*.04,1.,-dz*.04));vec3 eye=normalize(uEye-vWorld);vec3 sun=normalize(vec3(-22.,34.,14.));float fres=pow(1.-max(dot(eye,normal),0.),3.);float spec=pow(max(dot(reflect(-sun,normal),eye),0.),240.);float depth=max(.01,.035-(texture2D(uBed,(p-uBedOrigin)/768.).r*2.-1.));
+ void main(){vec2 p=vWorld.xz;
+  // Ruta ligera por píxel: evita reflejos, normales de tres muestras,
+  // especular de alta potencia y efectos de espuma que cargan la GPU.
+  if(uLow>.5){
+   float bedLevel=texture2D(uBed,(p-uBedOrigin)/768.).r;
+   float shore=smoothstep(.47,.52,bedLevel);
+   float ripple=sin(p.x*2.7+p.y*2.2+uTime*.7)*.014;
+   vec3 simple=mix(vec3(.08,.16,.145),vec3(.23,.27,.22),shore)+ripple;
+   simple=mix(simple,vec3(.46,.52,.51),uCold*.65);
+   float farFog=1.-exp(-pow(length(uEye-vWorld)*.0027,2.));
+   gl_FragColor=vec4(mix(simple,uSky,farFog),1.);return;
+  }
+  float w=waves(p);float dx=(waves(p+vec2(.025,0.))-w)/.025;float dz=(waves(p+vec2(0.,.025))-w)/.025;vec3 normal=normalize(vec3(-dx*.04,1.,-dz*.04));vec3 eye=normalize(uEye-vWorld);vec3 sun=normalize(vec3(-22.,34.,14.));float fres=pow(1.-max(dot(eye,normal),0.),3.);float spec=pow(max(dot(reflect(-sun,normal),eye),0.),240.);float depth=max(.01,.035-(texture2D(uBed,(p-uBedOrigin)/768.).r*2.-1.));
  vec3 color=mix(vec3(.18,.24,.15),vec3(.055,.13,.115),smoothstep(0.,.9,depth));float caustic=pow(.5+.5*sin(p.x*19.+w*5.+uTime)*sin(p.y*22.-uTime*.65),5.);color+=vec3(.14,.17,.09)*caustic*(1.-smoothstep(.1,.65,depth));
  vec2 reflectUV=vReflect.xy/max(vReflect.w,.0001)+normal.xz*.016;vec3 reflection=texture2D(uReflection,clamp(reflectUV,vec2(.002),vec2(.998))).rgb;color=mix(color,mix(uSky*.6,reflection,uReflect),.22+fres*.56);
  float shore=1.-smoothstep(.025,.22,depth);float foam=smoothstep(.45,.78,sin(p.y*28.+p.x*15.+uTime)*.25+sin(p.y*12.-uTime*.4)*.25+.5)*shore;color=mix(color,vec3(.55,.57,.45),foam*.2);color+=vec3(1.,.87,.57)*spec*1.2;color=mix(color,vec3(.48,.58,.57)+w*.03,uCold*.6);float fog=1.-exp(-pow(length(uEye-vWorld)*.0027,2.));color=mix(color,uSky,fog);gl_FragColor=vec4(color,1.);
