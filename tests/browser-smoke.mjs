@@ -25,6 +25,45 @@ try{
  assert.equal(await page.locator('body').getAttribute('data-graphics-quality'),'low');
  // Comprobación de arranque real; evitamos recargar en SwiftShader, que puede bloquear la navegación en CI.
  await page.locator('#menu-resume').click();
+ // La barra izquierda debe plegarse por completo, dar anchura real al
+ // canvas y volver a abrirse con el MISMO botón, también en móvil.
+ const panel=page.locator('#sidebar'),toggle=page.locator('#sidebar-toggle');
+ assert.equal(await toggle.getAttribute('aria-expanded'),'true','El menú inicia abierto en escritorio');
+ const mapWidthBefore=await page.locator('#game-area').evaluate(el=>el.getBoundingClientRect().width);
+ await toggle.click();
+ await page.waitForTimeout(280);
+ assert.equal(await toggle.getAttribute('aria-expanded'),'false');
+ assert.equal(await panel.evaluate(el=>el.inert),true,'La barra plegada no debe aceptar foco');
+ assert.equal(await page.locator('body.sidebar-collapsed').count(),1);
+ const mapWidthAfter=await page.locator('#game-area').evaluate(el=>el.getBoundingClientRect().width);
+ assert.ok(mapWidthAfter-mapWidthBefore>=245,'El mapa no se amplió al plegar el menú');
+ assert.equal(await page.evaluate(()=>localStorage.getItem('valdora-sidebar-open')),'false');
+ await toggle.focus();
+ await page.keyboard.press('Enter');
+ await page.waitForTimeout(280);
+ assert.equal(await toggle.getAttribute('aria-expanded'),'true');
+ assert.equal(await panel.evaluate(el=>el.inert),false);
+ const mapWidthRestored=await page.locator('#game-area').evaluate(el=>el.getBoundingClientRect().width);
+ assert.ok(Math.abs(mapWidthRestored-mapWidthBefore)<3,'El menú abierto debe recuperar su anchura');
+ assert.equal(await page.evaluate(()=>localStorage.getItem('valdora-sidebar-open')),'true');
+ // Cambiar tamaño no debe reabrir accidentalmente el cajón en móvil.
+ await page.setViewportSize({width:390,height:800});
+ await page.waitForTimeout(100);
+ assert.equal(await toggle.getAttribute('aria-expanded'),'false');
+ assert.equal(await panel.evaluate(el=>el.inert),true);
+ await page.locator('#mobile-build').click();
+ assert.equal(await toggle.getAttribute('aria-expanded'),'true');
+ assert.equal(await page.locator('#sidebar.open').count(),1);
+ await toggle.click();
+ assert.equal(await page.locator('#sidebar.open').count(),0);
+ await page.locator('#mobile-build').click();
+ await page.keyboard.press('Escape');
+ assert.equal(await toggle.getAttribute('aria-expanded'),'false','Escape cierra el menú móvil');
+ await page.setViewportSize({width:1280,height:800});
+ await page.waitForTimeout(300);
+ assert.equal(await toggle.getAttribute('aria-expanded'),'true','Escritorio recupera su estado guardado');
+ assert.equal(await panel.evaluate(el=>el.inert),false);
+
  // Probar la cantera y su representación real dentro del renderizador WebGL.
  const mine=await page.evaluate(async()=>{
   const {world,renderer,chooseBuilding,actAt,updateUI}=window.__valdoraSmoke;
