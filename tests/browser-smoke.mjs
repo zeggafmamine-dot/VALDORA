@@ -60,7 +60,10 @@ try{
  await page.keyboard.press('Escape');
  assert.equal(await toggle.getAttribute('aria-expanded'),'false','Escape cierra el menú móvil');
  await page.setViewportSize({width:1280,height:800});
- await page.waitForTimeout(300);
+ await page.waitForFunction(()=>{
+  return !window.matchMedia('(max-width:700px)').matches&&
+   document.getElementById('sidebar-toggle').getAttribute('aria-expanded')==='true';
+ },null,{timeout:12000});
  assert.equal(await toggle.getAttribute('aria-expanded'),'true','Escritorio recupera su estado guardado');
  assert.equal(await panel.evaluate(el=>el.inert),false);
 
