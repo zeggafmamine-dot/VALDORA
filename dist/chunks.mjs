@@ -8,7 +8,7 @@ export class ChunkStore{
  constructor(createTile){this.createTile=createTile;this.cache=new Map();this.changes=new Map();this.region={x:0,y:0};}
  get chunkCount(){return this.cache.size;}
  get changedCount(){return this.changes.size;}
- isActive(cx,cy){return cx>=this.region.x*4&&cx<this.region.x*4+4&&cy>=this.region.y*4&&cy<this.region.y*4+4;}
+ isActive(cx,cy){return cx>=this.region.x*4-2&&cx<this.region.x*4+6&&cy>=this.region.y*4-2&&cy<this.region.y*4+6;}
  getChunk(cx,cy){
   const k=key(cx,cy);
   if(this.cache.has(k)){const value=this.cache.get(k);this.cache.delete(k);this.cache.set(k,value);return value;}
