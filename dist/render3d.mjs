@@ -248,7 +248,39 @@ export class Renderer{
    this.buildingsGroup.add(o);this.buildingMeshes.set(b.id,o);changed=true;}
   if(changed)this.gl.shadowMap.needsUpdate=true;
  }
- syncPeople(time){const local=this.world.terrainVersion===3?this.world.citizens.filter(c=>Math.abs(c.x-this.camera.x)<180&&Math.abs(c.y-this.camera.y)<180):this.world.citizens;for(const [id,obj]of this.people)if(!local.some(c=>c.id===id)){this.villagersGroup.remove(obj);this.disposeGroup(obj);this.people.delete(id);}for(const c of local){let obj=this.people.get(c.id);if(!obj){obj=citizenModel(this.materials,c.color);this.people.set(c.id,obj);this.villagersGroup.add(obj);}const bridgeY=this.bridgeHeights?.get(Math.floor(c.x)+','+Math.floor(c.y));const height=bridgeY===undefined?this.heightAt(c.x,c.y):bridgeY;obj.position.set(c.x,height+.015,c.y);if(c.path.length){obj.rotation.y=Math.atan2(c.path[0].x-c.x,c.path[0].y-c.y);const p=this.world.speed?Math.sin(time*9+c.id)*.5:0;obj.userData.limbs.forEach((l,i)=>l.rotation.x=i%2?p:-p);}else obj.userData.limbs.forEach(l=>l.rotation.x=0);}}
+ syncPeople(time){
+  const local=this.world.terrainVersion===3
+   ?this.world.citizens.filter(c=>Math.abs(c.x-this.camera.x)<180&&Math.abs(c.y-this.camera.y)<180)
+   :this.world.citizens;
+  const localIds=new Set(local.map(c=>c.id));
+  for(const [id,obj] of this.people){
+   if(localIds.has(id))continue;
+   this.villagersGroup.remove(obj);this.disposeGroup(obj);
+   this.people.delete(id);
+  }
+  for(const c of local){
+   let obj=this.people.get(c.id);
+   if(!obj){
+    obj=citizenModel(this.materials,c.color);
+    this.people.set(c.id,obj);this.villagersGroup.add(obj);
+   }
+   const bridgeY=this.bridgeHeights?.get(Math.floor(c.x)+','+Math.floor(c.y));
+   // Un colono quieto no necesita muestrear de nuevo la altura procedural
+   // del terreno 60 veces por segundo. Solo recalcular al moverse o al
+   // construirse/desaparecer el puente sobre el que se encuentra.
+   const state=obj.userData;
+   if(state.lastX!==c.x||state.lastY!==c.y||state.lastBridgeY!==bridgeY){
+    const height=bridgeY===undefined?this.heightAt(c.x,c.y):bridgeY;
+    obj.position.set(c.x,height+.015,c.y);
+    state.lastX=c.x;state.lastY=c.y;state.lastBridgeY=bridgeY;
+   }
+   if(c.path.length){
+    obj.rotation.y=Math.atan2(c.path[0].x-c.x,c.path[0].y-c.y);
+    const p=this.world.speed?Math.sin(time*9+c.id)*.5:0;
+    state.limbs.forEach((l,i)=>l.rotation.x=i%2?p:-p);
+   }else state.limbs.forEach(l=>l.rotation.x=0);
+  }
+ }
  resize(){const r=this.canvas.getBoundingClientRect();this.width=r.width;this.height=r.height;this.gl.setSize(r.width,r.height,false);this.post?.resize(Math.max(1,Math.round(r.width*this.gl.getPixelRatio())),Math.max(1,Math.round(r.height*this.gl.getPixelRatio())));this.viewCamera.aspect=r.width/Math.max(1,r.height);this.viewCamera.updateProjectionMatrix();this.updateCamera();}
  center(){this.camera={x:31.5,y:32.5};this.zoom=1;this.azimuth=.83;this.elevation=.79;this.updateCamera();}
  iso(x,y){return {x,y};}
@@ -516,7 +548,7 @@ export class Renderer{
   this.selectedRing.visible=false;
  }
  updateSeason(){const s=this.world.season,p=seasonColors[s];this.lastSeason=s;this.scene.background.set(p.sky);this.scene.fog.color.set(p.sky);this.sun.color.set(p.sun);this.sun.intensity=s===3?1.8:2.5;this.water.material.uniforms.uCold.value=s===3?1:0;this.water.material.uniforms.uSky.value.set(p.sky);this.materials.grass.color.set(s===3?'#c3c9b8':s===2?'#9c8c58':'#8a965d');this.materials.roof.color.set(s===3?'#f1f0e7':'#d5cabb');this.sky.material.uniforms.uHorizon.value.set(p.sky);this.sky.material.uniforms.uCold.value=s===3?1:0;this.materials.thatch.color.set(s===3?'#d6d8c8':'#c5b382');if(this.chunkVisuals){for(const chunk of this.chunkVisuals.values())this.scopeVisualChunk(chunk,()=>{this.colorTerrain();if(chunk.detail)this.refreshTrees();});}else{this.colorTerrain();this.refreshTrees();}this.syncBuildings();this.miniKey='';}
- invalidate(){this.lastDay=-1;this.lastVisualKey='';this.miniKey='';}
+ invalidate(){this.lastDay=-1;this.lastVisualKey='';this.miniKey='';this.selectionStateKey='';}
  setQuality(q){if(!['low','medium','high'].includes(q))q='low';this.quality=q;if(q!=='low'&&!this.post)this.post=createPostprocessing(this.gl,this.width,this.height);this.gl.setPixelRatio(q==='high'?Math.min(devicePixelRatio||1,2):q==='low'?.8:1);this.gl.shadowMap.enabled=q!=='low';const shadowSize=q==='high'?4096:q==='medium'?2048:1024;if(this.sun.shadow.mapSize.x!==shadowSize){this.sun.shadow.mapSize.set(shadowSize,shadowSize);this.sun.shadow.map?.dispose();this.sun.shadow.map=null;}if(this.chunkVisuals){
    for(const chunk of this.chunkVisuals.values())if(chunk.detail){
     if(q==='high'&&!chunk.grassInst)this.scopeVisualChunk(chunk,()=>this.createGrassInstances());
@@ -543,7 +575,22 @@ export class Renderer{
    if(key!==this.lastVisualKey){this.makeRoads();this.lastVisualKey=key;}
    this.lastDay=this.world.totalDays;
   }
-  this.syncPeople(time);this.updateSelection();this.detail.wind.value=time;this.sky.material.uniforms.uTime.value=time;this.water.material.uniforms.uTime.value=time;this.water.material.uniforms.uEye.value.copy(this.viewCamera.position);
+  // La validación de construcciones (canteras incluidas) y sus previsualizaciones
+   // solo necesita actualizarse cuando cambia la casilla, modo, recursos o día.
+   const h=this.hover,p=this.linePreview;
+   const selectionKey=[this.selected??'',this.buildMode??'',+this.gatherMode,
+    h?.x??'',h?.y??'',p?.type??'',p?.start?.x??'',p?.start?.y??'',
+    p?.end?.x??'',p?.end?.y??'',p?.ok??'',p?.count??'',
+    this.world.totalDays,this.world.resources.wood,this.world.resources.stone].join(':');
+   if(selectionKey!==this.selectionStateKey){
+    this.updateSelection();this.selectionStateKey=selectionKey;
+   }
+   // En calidad Ligera la animación de ciudadanos se limita a 30 Hz; la
+   // cámara y el agua siguen renderizando en cada fotograma disponible.
+   if(this.quality!=='low'||time-(this.lastPeopleUpdate||-1)>1/30){
+    this.syncPeople(time);this.lastPeopleUpdate=time;
+   }
+   this.detail.wind.value=time;this.sky.material.uniforms.uTime.value=time;this.water.material.uniforms.uTime.value=time;this.water.material.uniforms.uEye.value.copy(this.viewCamera.position);
   let si=0;for(const o of this.buildingMeshes.values()){const smoke=o.userData.smoke;if(!smoke)continue;for(let i=0;i<7&&si<500;i++){const age=(time*.15+i/7)%1;this.smokePos[si*3]=o.position.x+smoke[0]+age*.55+Math.sin(age*6)*.12;this.smokePos[si*3+1]=o.position.y+smoke[1]+age*1.8;this.smokePos[si*3+2]=o.position.z+smoke[2]+age*.2;si++;}}this.smokeGeo.getAttribute('position').needsUpdate=true;this.smokeGeo.setDrawRange(0,si);
   for(const obj of this.animalMeshes){const d=obj.userData,x=d.x+Math.sin(time*.07+d.phase)*.7,z=d.z+Math.cos(time*.05+d.phase)*.5;obj.position.set(x,this.heightAt(x,z),z);obj.rotation.y=Math.sin(time*.02+d.phase)*2;}
   this.river.update(this.viewCamera,time);
@@ -572,7 +619,7 @@ export class Renderer{
   for(const o of [...this.buildingsGroup.children]){this.disposeGroup(o);this.buildingsGroup.remove(o);}
   for(const o of [...this.villagersGroup.children]){this.disposeGroup(o);this.villagersGroup.remove(o);}
   for(const o of this.animalMeshes){this.scene.remove(o);this.disposeGroup(o);}
-  this.animalMeshes=[];this.buildingMeshes.clear();this.people.clear();this.treeInstances=[];
+  this.animalMeshes=[];this.buildingMeshes.clear();this.people.clear();this.treeInstances=[];this.selectionStateKey='';this.lastPeopleUpdate=-1;
   if(this.terrain){this.scene.remove(this.terrain);this.terrain.geometry.dispose();this.terrain=null;}
   this.world=w;this.chunkVisuals=w.terrainVersion===3?new Map():null;
   this.linePreview=null;this.selected=null;this.buildMode=null;this.gatherMode=false;this.quarryArea.visible=false;this.quarryAreaKey='';
