@@ -7,44 +7,44 @@ import {desiredChunks,visibilityTarget,approachOpacity,shouldRetire,CHUNK_WIDTH,
 
 test('sectores de 64×64 y horizonte amplio sin agrandar la zona de transición',()=>{
  assert.equal(CHUNK_WIDTH,64);
- assert.equal(VISUAL_RADIUS,7);
- assert.equal(MAX_VISUAL_CHUNKS,170);
+ assert.equal(VISUAL_RADIUS,6);
+ assert.equal(MAX_VISUAL_CHUNKS,135);
  assert.equal(CAMERA_DISTANCE,112);
  assert.equal(DEFAULT_GRAPHICS_QUALITY,'low');
  assert.equal(FADE_BAND,74);
  assert.equal(FADE_OUT_DISTANCE-FULL_DETAIL_DISTANCE,74);
- assert.equal(MAX_HORIZON,384);
- assert.equal(INITIAL_HORIZON,288);
- assert.equal(MIN_HORIZON,256);
- assert.equal(FADE_OUT_DISTANCE,384);
- assert.equal(FULL_DETAIL_DISTANCE,310);
+ assert.equal(MAX_HORIZON,320);
+ assert.equal(INITIAL_HORIZON,256);
+ assert.equal(MIN_HORIZON,224);
+ assert.equal(FADE_OUT_DISTANCE,320);
+ assert.equal(FULL_DETAIL_DISTANCE,246);
  // La vista mantiene exactamente la misma cámara (112) y banda de fundido (74).
  assert.ok(MAX_VISUAL_CHUNKS<420/2);
- assert.equal(desiredChunks(0,0).length,225);
+ assert.equal(desiredChunks(0,0).length,169);
  const active=desiredChunks(0,0,VISUAL_RADIUS,MAX_HORIZON).filter(c=>c.opacity>.005);
- assert.ok(active.length<=170,'El horizonte normal no debe requerir más mallas que el límite de GPU');
+ assert.ok(active.length<=135,'El horizonte normal no debe requerir más mallas que el límite de GPU');
  for(const x of [31.5,63.9,64,64.1,79,128,239]){
   const wanted=desiredChunks(x,80);
-  assert.equal(wanted.length,225);
+  assert.equal(wanted.length,169);
   assert.ok(Math.abs(wanted[0].x-Math.floor(x/64))<=1);
   assert.ok(wanted.every(v=>Number.isFinite(v.opacity)&&v.opacity>=0&&v.opacity<=1));
  }
 });
 test('el borde de aparición sigue a la cámara: sin salto al cruzar casillas 64×64',()=>{
- const before=visibilityTarget(6,0,-10,32);
- const far=visibilityTarget(6,0,0,32);
- const approaching=visibilityTarget(6,0,50,32);
- const near=visibilityTarget(6,0,100,32);
- const inside=visibilityTarget(6,0,140,32);
+ const before=visibilityTarget(5,0,-10,32);
+ const far=visibilityTarget(5,0,0,32);
+ const approaching=visibilityTarget(5,0,50,32);
+ const near=visibilityTarget(5,0,100,32);
+ const inside=visibilityTarget(5,0,140,32);
  assert.equal(before,0);assert.equal(far,0);
  assert.ok(far<approaching&&approaching<near&&near<=inside);
  assert.equal(inside,1);
- const justBefore=visibilityTarget(6,0,63.99,32);
- const justAfter=visibilityTarget(6,0,64.01,32);
+ const justBefore=visibilityTarget(5,0,63.99,32);
+ const justAfter=visibilityTarget(5,0,64.01,32);
  assert.ok(Math.abs(justBefore-justAfter)<.01);
 });
 test('al ajustar el horizonte por rendimiento el fundido sigue teniendo 74 casillas',()=>{
- for(const horizon of [MIN_HORIZON,288,352,MAX_HORIZON]){
+ for(const horizon of [MIN_HORIZON,256,288,MAX_HORIZON]){
   const sector=Math.floor(horizon/64);
   const cx=sector,cy=0;
   const d=Math.abs(cx*64+32);
@@ -60,8 +60,8 @@ test('el zoom limita la carga de sectores invisibles, sin recortar la transició
  assert.equal(renderDistanceForZoom(.38,MAX_HORIZON),MAX_HORIZON);
  assert.equal(renderDistanceForZoom(3.4,MAX_HORIZON),MIN_HORIZON);
  assert.ok(renderDistanceForZoom(1,MAX_HORIZON)<=MAX_HORIZON);
- assert.equal(shouldRetire(-9,0,0,32),true);
- assert.equal(shouldRetire(-6,0,0,32),false);
+ assert.equal(shouldRetire(-8,0,0,32),true);
+ assert.equal(shouldRetire(-5,0,0,32),false);
 });
 test('la opacidad cambia gradualmente entre fotogramas',()=>{
  let alpha=0;const values=[];
