@@ -18,3 +18,20 @@
 .quarry-reserve-highlight .work-area-note{margin:10px 0 0;color:#c6d1b6;font-size:10px;line-height:1.5;font-weight:400}
 .quarry-inspector{max-width:min(650px,68%)}
 @media(max-width:700px){.quarry-inspector{max-width:84%}}
+
+/* Menú izquierdo plegable: el mapa ocupa todo el espacio liberado.
+   El botón reside en la cabecera y permanece accesible en ambos estados. */
+.sidebar{min-width:0;transition:width .22s ease,opacity .18s ease}
+.sidebar-toggle{flex-shrink:0;width:35px;height:36px;margin-right:11px;border:1px solid #b9c9a729;border-radius:6px;color:#dbc99e;background:#ffffff08}
+.sidebar-toggle:hover{background:#d0bd8630}
+.sidebar-toggle svg{width:20px;height:20px}
+body.sidebar-collapsed .sidebar{width:0;min-width:0;opacity:0;overflow:hidden;border-right:0;box-shadow:none;pointer-events:none}
+@media(max-width:700px){
+ .sidebar{transition:transform .22s ease;opacity:1;overflow-y:auto}
+ .sidebar-toggle{width:28px;height:30px;margin-right:5px}
+ .sidebar-toggle svg{width:17px;height:17px}
+ .mobile-build.active{background:#e7d1a0}
+}
+@media(prefers-reduced-motion:reduce){
+ .sidebar{transition:none}
+}
