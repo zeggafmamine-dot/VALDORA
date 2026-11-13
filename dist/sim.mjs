@@ -26,7 +26,7 @@ function smooth(x,y,seed){const a=Math.floor(x),b=Math.floor(y),u=(x-a)**2*(3-2*
 const NAMES=['Elena','Mateo','Inés','Bruno','Alba','Nicolás','Clara','Tomás','Vera','Hugo','Lía','Gabriel','Nora','Leo','Sara','Iván','Emma','Adrián','Mara','Lucas','Aina','Amir','Noa','Oliver'];
 export class World{
  constructor(seed='VALDORA-2048',restored=null,coordinates={x:0,y:0}){
-  this.terrainVersion=restored?(restored.terrainVersion===1?1:3):3;this.coordinates=this.terrainVersion===3?(restored?restored.coordinates:coordinates):{x:0,y:0};
+  this.terrainVersion=restored?(!restored.terrainVersion||restored.terrainVersion===1?1:3):3;this.coordinates=this.terrainVersion===3?(restored?restored.coordinates:coordinates):{x:0,y:0};
   if(this.terrainVersion===3&&!validCoordinates(this.coordinates))throw Error('Coordenadas no válidas');
   this.seed=String(seed);this.seedNumber=seedHash(seed);this.day=1;this.year=1;this.season=0;this.resources={wood:160,stone:90,food:220,firewood:75};this.health=100;this.happiness=85;this.speed=1;this.lastSpeed=1;this.nextId=1;this.buildings=[];this.citizens=[];this.events=[];this.gatherQueue=[];this.milestones=[];this.history=[];this.starveDays=0;this.coldDays=0;this.gameOver=false;this.won=false;this.totalDays=0;this.tiles=[];this.viewRegion={x:0,y:0};this.buildingCells=new Map();this.production={wood:0,stone:0,food:0,firewood:0};this.generate();
   if(restored){this.restore(restored);return;}
