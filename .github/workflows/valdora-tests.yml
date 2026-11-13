@@ -1,7 +1,7 @@
 name: Valdora CI
 on:
   push:
-    branches: [main, feature/infinite-world-streaming]
+    branches: [main, 'feature/**']
   pull_request:
     branches: [main]
   workflow_dispatch:
