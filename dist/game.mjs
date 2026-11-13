@@ -39,12 +39,29 @@ function toggleGather(){const active=renderer.gatherMode;cancelMode();closeSelec
 function showTooltip(e,title,description,detail=''){if(window.innerWidth<701||!$('modal-overlay').hidden)return;const t=$('tooltip');t.innerHTML=`<h4>${esc(title)}</h4><p>${esc(description)}</p><small>${esc(detail)}</small>`;t.hidden=false;const r=e.getBoundingClientRect();let x=r.right+12,y=r.top;if(r.top<90){x=r.left;y=r.bottom+12;}if(x+235>innerWidth)x=r.left-247;t.style.left=Math.max(8,x)+'px';t.style.top=Math.min(innerHeight-t.offsetHeight-10,y)+'px';}
 function hideTooltip(){$('tooltip').hidden=true;}
 function toast(msg,type='info'){const e=document.createElement('div');e.className='toast '+type;e.textContent=msg;$('toast-container').append(e);setTimeout(()=>e.remove(),3700);while($('toast-container').children.length>3)$('toast-container').firstChild.remove();}
-function selectBuilding(id){cancelMode();selected=id;renderer.selected=id;renderSelection();}
-function closeSelection(){selected=null;renderer.selected=null;$('selection-panel').hidden=true;}
+function selectBuilding(id){cancelMode();selected=id;renderer.selected=id;renderSelection();renderer.updateSelection?.();}
+function closeSelection(){selected=null;renderer.selected=null;$('selection-panel').hidden=true;$('quarry-inspector').hidden=true;renderer.updateSelection?.();}
 function renderSelection(){const b=world.buildings.find(b=>b.id===selected);if(!b){closeSelection();return;}const d=BUILDINGS[b.type],panel=$('selection-panel');
  const quarryReserve=b.type==='quarry'?world.stoneAround(b):null;
  const quarryState=b.type==='quarry'?(b.progress<1?'En construcción':quarryReserve===0?'Agotado':b.paused?'Pausada':b.workers===0?'Sin trabajadores':'En explotación'):null;
  panel.hidden=false;panel.innerHTML=`<button class="panel-close" aria-label="Cerrar panel">${icon('close')}</button><div class="panel-heading"><span class="building-art" style="--building-color:${d.color}">${icon(d.icon)}</span><div><h3>${d.name}</h3><small>${b.progress<1?'En construcción':b.paused?'Producción pausada':d.maxWorkers?b.workers?'En funcionamiento':'Sin trabajadores':'Construido'}</small></div></div><p class="panel-description">${d.description}</p>${b.progress<1?`<div class="panel-stat"><span>Construcción</span><strong>${Math.round(b.progress*100)}%</strong></div><div class="progress-bar"><i style="width:${b.progress*100}%"></i></div><p class="panel-description">${world.builders?`${world.builders} trabajadores disponibles para construir.`:'Necesitas liberar al menos un trabajador de otro edificio.'}</p>`:`<div class="panel-stat"><span>${d.detail}</span></div>${d.maxWorkers?`<div class="panel-stat"><span>Trabajadores</span><div class="worker-controls"><button id="worker-minus" aria-label="Quitar trabajador" ${b.workers===0?'disabled':''}>${icon('minus')}</button><strong>${b.workers} / ${d.maxWorkers}</strong><button id="worker-plus" aria-label="Añadir trabajador" ${b.workers>=d.maxWorkers||world.idle===0?'disabled':''}>${icon('plus')}</button></div></div>`:''}${b.type==='gatherer'||b.type==='forester'?`<div class="panel-stat"><span>Bosque cercano</span><strong>${Math.round(world.forestAt(b,b.type==='forester'?8:7)*100)}%</strong></div>`:''}${b.type==='house'?`<div class="panel-stat"><span>Plazas totales en la aldea</span><strong>${world.population} / ${world.capacity}</strong></div>`:''}`}${b.type==='quarry'? `<section class="quarry-reserve" aria-label="Información de piedra de la cantera"><div class="panel-stat"><span>Reserva de piedra en el radio</span><strong data-quarry-reserve>${quarryReserve.toLocaleString('es')} unidades</strong></div><div class="panel-stat"><span>Yacimiento</span><strong data-quarry-status>${quarryState}</strong></div><div class="panel-stat"><span>Radio de extracción</span><strong>9 casillas</strong></div></section>`:''}<div class="panel-actions">${d.maxWorkers&&b.progress>=1?`<button id="toggle-production">${b.paused?'Reanudar':'Pausar'} producción</button>`:''}${b.type!=='hall'?`<button class="danger" id="demolish-btn">${b.progress<1?'Cancelar obra':'Demoler'}</button>`:''}</div>`;
+ // Una tarjeta grande dentro de la ficha y un indicador independiente sobre el mapa:
+ // el dato sigue visible aunque el jugador no desplace el panel hacia abajo.
+ const inspector=$('quarry-inspector');
+ if(b.type==='quarry'){
+  const header=document.createElement('div');
+  header.className='quarry-reserve-highlight';
+  const caption=document.createElement('small');caption.textContent='PIEDRA DISPONIBLE EN EL ÁREA';
+  const value=document.createElement('strong');value.setAttribute('data-quarry-primary','');
+  value.textContent=quarryReserve.toLocaleString('es')+' unidades';
+  header.append(caption,value);
+  panel.querySelector('.panel-heading').after(header);
+  inspector.hidden=false;
+  inspector.textContent='CANTERA · '+quarryReserve.toLocaleString('es')+' piedras disponibles · '+quarryState+' · Radio 9';
+  inspector.dataset.reserve=String(quarryReserve);
+ }else{
+  inspector.hidden=true;
+ }
  panel.querySelector('.panel-close').onclick=closeSelection;if($('worker-minus'))$('worker-minus').onclick=()=>{world.changeWorkers(b.id,-1);updateUI();};if($('worker-plus'))$('worker-plus').onclick=()=>{world.changeWorkers(b.id,1);updateUI();};if($('toggle-production'))$('toggle-production').onclick=()=>{b.paused=!b.paused;renderSelection();};if($('demolish-btn'))$('demolish-btn').onclick=()=>confirmDemolish(b);
 }
 function confirmDemolish(b){showModal(`<div class="modal-eyebrow">GESTIÓN DE LA ALDEA</div><h2>¿${b.progress<1?'Cancelar la obra':'Demoler el edificio'}?</h2><p>Se eliminará <strong>${BUILDINGS[b.type].name.toLowerCase()}</strong> y recuperarás el 50 % de sus materiales.${b.type==='house'?' La aldea perderá 4 plazas de alojamiento.':''}</p><div class="modal-actions"><button class="btn-secondary" id="cancel-demolish">Conservar edificio</button><button class="btn-danger" id="confirm-demolish">${b.progress<1?'Cancelar obra':'Demoler'}</button></div>`);$('cancel-demolish').onclick=closeModal;$('confirm-demolish').onclick=()=>{world.demolish(b.id);closeSelection();renderer.invalidate();closeModal();updateUI();save(false);};}
