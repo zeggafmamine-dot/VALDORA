@@ -49,7 +49,25 @@ export class Renderer{
   if(shore<1.2)h=lerp(-.75,h,smooth(-1,1.2,shore));
   return h;
  }
- makeTerrain(cx=null,cy=null){const chunk=Number.isInteger(cx)&&Number.isInteger(cy),res=chunk?20:224,span=chunk?64:224,ox=chunk?cx*SIZE:this.world.terrainVersion===3?this.world.viewRegion.x*SIZE:0,oz=chunk?cy*SIZE:this.world.terrainVersion===3?this.world.viewRegion.y*SIZE:0;const geo=new T.PlaneGeometry(span,span,res,res);geo.rotateX(-Math.PI/2);const p=geo.getAttribute('position'),colors=new Float32Array(p.count*3);for(let i=0;i<p.count;i++){const x=p.getX(i)+ox+32,z=p.getZ(i)+oz+32;p.setXYZ(i,x,this.heightAt(x,z),z);}geo.setAttribute('color',new T.BufferAttribute(colors,3));geo.computeVertexNormals();this.terrain=new T.Mesh(geo,this.materials.ground);this.terrain.receiveShadow=true;this.terrain.castShadow=false;(chunk?this.staticGroup:this.scene).add(this.terrain);this.colorTerrain();}
+ makeTerrain(cx=null,cy=null){const chunk=Number.isInteger(cx)&&Number.isInteger(cy),res=chunk?20:224,span=chunk?64:224,ox=chunk?cx*SIZE:this.world.terrainVersion===3?this.world.viewRegion.x*SIZE:0,oz=chunk?cy*SIZE:this.world.terrainVersion===3?this.world.viewRegion.y*SIZE:0;const geo=new T.PlaneGeometry(span,span,res,res);geo.rotateX(-Math.PI/2);const p=geo.getAttribute('position'),colors=new Float32Array(p.count*3);for(let i=0;i<p.count;i++){const x=p.getX(i)+ox+32,z=p.getZ(i)+oz+32;p.setXYZ(i,x,this.heightAt(x,z),z);}geo.setAttribute('color',new T.BufferAttribute(colors,3));geo.computeVertexNormals();this.terrain=new T.Mesh(geo,this.materials.ground);if(chunk)this.terrain.userData.groundChunk={x:cx*SIZE,z:cy*SIZE,segments:res};this.terrain.receiveShadow=true;this.terrain.castShadow=false;(chunk?this.staticGroup:this.scene).add(this.terrain);this.colorTerrain();}
+ // La altura de las plantas debe coincidir con los TRIÁNGULOS visibles,
+ // no con la función ideal de relieve. Al bajar de 32 a 20 divisiones,
+ // apoyarlas en heightAt() provocaba árboles flotantes desde ciertos ángulos.
+ visualGroundHeightAt(x,z){
+  const mesh=this.terrain,chunk=mesh?.userData.groundChunk;
+  if(!chunk)return this.heightAt(x,z);
+  const position=mesh.geometry.getAttribute('position'),segments=chunk.segments,stride=segments+1;
+  const u=Math.max(0,Math.min(segments-1e-7,(x-chunk.x)*segments/SIZE));
+  const v=Math.max(0,Math.min(segments-1e-7,(z-chunk.z)*segments/SIZE));
+  const col=Math.floor(u),row=Math.floor(v),fx=u-col,fz=v-row;
+  const i=row*stride+col;
+  const h00=position.getY(i),h10=position.getY(i+1);
+  const h01=position.getY(i+stride),h11=position.getY(i+stride+1);
+  // PlaneGeometry triangula cada celda por la diagonal (0,1) → (1,0).
+  return fx+fz<=1
+   ?h00+(h10-h00)*fx+(h01-h00)*fz
+   :h11+(h01-h11)*(1-fx)+(h10-h11)*(1-fz);
+ }
  colorTerrain(){const p=this.terrain.geometry.getAttribute('position'),colors=this.terrain.geometry.getAttribute('color'),pal=seasonColors[this.world.season],grass=new T.Color(pal.grass),forest=new T.Color(pal.forest),bank=new T.Color(this.world.season===3?'#b6bdb2':'#a39c7c'),rock=new T.Color(this.world.season===3?'#c0c5bc':'#92958a'),color=new T.Color();for(let i=0;i<p.count;i++){const x=p.getX(i),z=p.getZ(i),h=p.getY(i),n=noise((x+(this.world.coordinates?.x||0)*(this.world.terrainVersion>=2?REGION_SIZE:0))*.22,(z+(this.world.coordinates?.y||0)*(this.world.terrainVersion===2?REGION_SIZE:0))*.22,this.world.seedNumber),fine=noise((x+(this.world.coordinates?.x||0)*(this.world.terrainVersion===2?REGION_SIZE:0))*.85,(z+(this.world.coordinates?.y||0)*(this.world.terrainVersion===2?REGION_SIZE:0))*.85,this.world.seedNumber+28);color.copy(grass).lerp(forest,n*.65).multiplyScalar(.92+fine*.2);if(h<.4)color.lerp(bank,clamp((.42-h)*1.9,0,1));if(h>2)color.lerp(rock,clamp((h-2)/4,0,.9));colors.setXYZ(i,color.r,color.g,color.b);}colors.needsUpdate=true;}
  makeWater(){this.river=makeRiver(this.gl,this.scene,this.heightAt.bind(this));this.water=this.river.mesh;}
  createTreeMeshes(){for(const inst of this.treeInstances){this.staticGroup.remove(inst);inst.geometry.dispose();}this.treeInstances=[];const all=(this.world.renderTiles||this.world.tiles).filter(t=>t.tree&&this.heightAt(t.x+.5,t.y+.5)>.2);this.knownTrees=new Set((this.world.renderTiles||this.world.tiles).filter(t=>t.tree));const lists=[[],[],[]];for(const t of all)lists[t.variant>.55?0:t.variant>.4?1:2].push(t);this.treeTiles=all;
@@ -74,7 +92,7 @@ export class Renderer{
   let gi=0;
   for(const t of tiles)for(let i=0;i<4;i++){
    const x=t.x+hash(i,t.x),z=t.y+hash(i,t.y,4);
-   this.dummy.position.set(x,this.heightAt(x,z),z);
+   this.dummy.position.set(x,this.visualGroundHeightAt(x,z),z);
    this.dummy.rotation.set(0,hash(i,t.x+t.y)*Math.PI*2,0);
    this.dummy.scale.setScalar(.55+hash(i,4)*.65);this.dummy.updateMatrix();
    this.grassInst.setMatrixAt(gi++,this.dummy.matrix);
@@ -97,7 +115,7 @@ export class Renderer{
     for(let i=0;i<tiles.length;i++){
      const t=tiles[i],r=hash(t.x,t.y,this.world.seedNumber+65);
      const x=t.x+.25+r*.5,z=t.y+.25+hash(t.y,t.x)*.5,size=.62+r*.5;
-     this.dummy.position.set(x,this.heightAt(x,z),z);
+     this.dummy.position.set(x,this.visualGroundHeightAt(x,z),z);
      this.dummy.rotation.set(0,r*Math.PI*2,0);
      this.dummy.scale.set(size*(t.tree?1:0),size*(.9+hash(t.x,t.y)*.2)*(t.tree?1:0),size*(t.tree?1:0));
      this.dummy.updateMatrix();inst.setMatrixAt(i,this.dummy.matrix);
@@ -125,7 +143,7 @@ export class Renderer{
   this.refreshRocks();
   // Smaller stones soften the riverbank without changing gameplay terrain.
   const pebbles=(this.world.renderTiles||this.world.tiles).filter(t=>t.type==='grass'&&this.heightAt(t.x+.5,t.y+.5)<.43&&t.variant>.5);const rocks=new T.InstancedMesh(geom,this.materials.rock,Math.max(1,pebbles.length));for(let i=0;i<pebbles.length;i++){const t=pebbles[i],r=t.variant;this.dummy.position.set(t.x+.5,this.heightAt(t.x+.5,t.y+.5),t.y+.5);this.dummy.scale.set(.15+r*.12,.08+r*.09,.13+r*.12);this.dummy.rotation.set(r,r*6,r);this.dummy.updateMatrix();rocks.setMatrixAt(i,this.dummy.matrix);}rocks.receiveShadow=true;this.staticGroup.add(rocks);}
- refreshGrass(){if(!this.grassInst)return;let i=0;for(const t of this.grassTiles)for(let j=0;j<4;j++){const x=t.x+hash(j,t.x),z=t.y+hash(j,t.y,4);this.dummy.position.set(x,this.heightAt(x,z),z);this.dummy.rotation.set(0,hash(j,t.x+t.y)*Math.PI*2,0);this.dummy.scale.setScalar(t.building||t.road||t.tree?0:.55+hash(j,4)*.65);this.dummy.updateMatrix();this.grassInst.setMatrixAt(i++,this.dummy.matrix);}this.grassInst.instanceMatrix.needsUpdate=true;}
+ refreshGrass(){if(!this.grassInst)return;let i=0;for(const t of this.grassTiles)for(let j=0;j<4;j++){const x=t.x+hash(j,t.x),z=t.y+hash(j,t.y,4);this.dummy.position.set(x,this.visualGroundHeightAt(x,z),z);this.dummy.rotation.set(0,hash(j,t.x+t.y)*Math.PI*2,0);this.dummy.scale.setScalar(t.building||t.road||t.tree?0:.55+hash(j,4)*.65);this.dummy.updateMatrix();this.grassInst.setMatrixAt(i++,this.dummy.matrix);}this.grassInst.instanceMatrix.needsUpdate=true;}
  refreshRocks(){
   const colors=['#857c6b','#a19b8c','#b1ad9d','#bcb9a9','#c9c7b6'];
   for(let i=0;i<this.rockTiles.length;i++){
@@ -244,12 +262,15 @@ export class Renderer{
   this.rebuildBridgeHeights();
  }
  fadeObjects(roots,opacity){
-  const originals=[],clones=new Map();
+  const originals=[],clones=new Map(),states=[];
   for(const root of roots)root.traverse(obj=>{
    if(!obj.material)return;
    const original=obj.material,fade=material=>{
     if(!clones.has(material)){
-     const copy=material.clone();copy.transparent=true;copy.depthWrite=false;copy.opacity=opacity;copy.needsUpdate=true;
+     const copy=material.clone();
+     // Durante la aparición se mezcla la geometría; al terminar debe
+     // recuperarse el depth buffer, especialmente para hojas alphaTest.
+     states.push({material:copy,opacity:material.opacity,transparent:material.transparent,depthWrite:material.depthWrite});
      clones.set(material,copy);
     }
     return clones.get(material);
@@ -257,7 +278,22 @@ export class Renderer{
    obj.material=Array.isArray(original)?original.map(fade):fade(original);
    originals.push({obj,original});
   });
-  return {originals,materials:[...clones.values()]};
+  const result={originals,materials:[...clones.values()],states};
+  this.applyFadeOpacity(result,opacity);
+  return result;
+ }
+ applyFadeOpacity(fade,opacity){
+  if(!fade)return;
+  const fullyVisible=opacity>=.98;
+  for(const state of fade.states){
+   const mat=state.material,transparent=fullyVisible?state.transparent:true;
+   const depthWrite=fullyVisible?state.depthWrite:false;
+   // No recompilar en cada fotograma: solo al entrar/salir del modo opaco.
+   if(mat.transparent!==transparent||mat.depthWrite!==depthWrite){
+    mat.transparent=transparent;mat.depthWrite=depthWrite;mat.needsUpdate=true;
+   }
+   mat.opacity=state.opacity*(fullyVisible?1:opacity);
+  }
  }
  rebuildBridgeHeights(){
   if(!this.chunkVisuals)return;
@@ -323,7 +359,7 @@ export class Renderer{
     visibilityTarget(chunk.cx,chunk.cy,this.camera.x,this.camera.y,renderDistance);
    chunk.opacity=approachOpacity(chunk.opacity,target,dt);
    if(Math.abs(chunk.opacity-target)<.001)chunk.opacity=target;
-   for(const material of chunk.fade.materials)material.opacity=chunk.opacity;
+   this.applyFadeOpacity(chunk.fade,chunk.opacity);
    const distance=chunkDistance(chunk.cx,chunk.cy,this.camera.x,this.camera.y);
    if(!chunk.detail&&distance<120&&time-this.lastDetailBuild>.18){
     this.addVisualDetail(chunk);this.lastDetailBuild=time;
@@ -332,7 +368,7 @@ export class Renderer{
     const targetDetail=Math.max(0,Math.min(1,(122-distance)/42));
     chunk.detailOpacity=approachOpacity(chunk.detailOpacity,targetDetail,dt);
     if(Math.abs(chunk.detailOpacity-targetDetail)<.001)chunk.detailOpacity=targetDetail;
-    for(const material of chunk.detailFade.materials)material.opacity=chunk.opacity*chunk.detailOpacity;
+    this.applyFadeOpacity(chunk.detailFade,chunk.opacity*chunk.detailOpacity);
     if(distance>152&&chunk.detailOpacity<.003)this.removeVisualDetail(chunk);
    }
    if(target===0&&chunk.opacity<.003)this.dropVisualChunk(chunk);

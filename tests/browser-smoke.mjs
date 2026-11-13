@@ -205,6 +205,69 @@ try{
  assert.equal(performance.lowWaterShader,1,'La calidad Ligera debe utilizar el shader simplificado del agua');
  assert.equal(performance.unnecessaryChunkReads,0,'No regenerar sectores intactos entre días');
 
+ // Verificar el defecto real: antes incluso las hojas opacas y el suelo al
+ // 100 % seguían sin escribir profundidad y se superponían según el ángulo.
+ const foliage=await page.evaluate(async()=>{
+  const {renderer}=window.__valdoraSmoke;
+  const T=await import('./vendor/three.module.js');
+  const {treeModel}=await import('./models3d.mjs');
+  const before={};
+  const g=new T.Group(),leaf=new T.Mesh(new T.PlaneGeometry(1,1),renderer.materials.leaves);
+  const terrain=new T.Mesh(new T.PlaneGeometry(1,1),renderer.materials.ground);
+  g.add(leaf,terrain);
+  const fade=renderer.fadeObjects([g],.45);
+  before.partial=fade.states.map(x=>({transparent:x.material.transparent,depthWrite:x.material.depthWrite,alphaTest:x.material.alphaTest}));
+  renderer.applyFadeOpacity(fade,1);
+  before.full=fade.states.map(x=>({transparent:x.material.transparent,depthWrite:x.material.depthWrite,alphaTest:x.material.alphaTest}));
+  renderer.applyFadeOpacity(fade,.5);
+  before.receding=fade.states.map(x=>({transparent:x.material.transparent,depthWrite:x.material.depthWrite}));
+  renderer.applyFadeOpacity(fade,1);
+  before.restored=fade.states.every(x=>x.material.depthWrite&&!x.material.transparent);
+  for(const material of fade.materials)material.dispose();
+  leaf.geometry.dispose();terrain.geometry.dispose();
+
+  // Los árboles necesitan una copa tridimensional incluso cuando las hojas
+  // de textura se ven de canto desde arriba o al rotar la cámara.
+  const crowns=[];
+  for(const variant of [0,1,2]){
+   const model=treeModel(renderer.materials,variant);
+   const volume=model.children.find(x=>x.material===renderer.materials.canopy);
+   if(!volume)throw Error('Sin copa volumétrica para árbol '+variant);
+   volume.geometry.computeBoundingBox();
+   const dims=new T.Vector3();volume.geometry.boundingBox.getSize(dims);
+   crowns.push({variant,x:dims.x,y:dims.y,z:dims.z,triangles:volume.geometry.getAttribute('position').count/3});
+   model.traverse(obj=>{if(obj.geometry)obj.geometry.dispose();});
+  }
+
+  const detail=[...renderer.chunkVisuals.values()].find(c=>c.detail&&c.treeInstances.length);
+  if(!detail)throw Error('No hay árboles visibles en el sector detallado');
+  const position=detail.terrain.geometry.getAttribute('position');
+  const first=position.getY(0);
+  const height=renderer.scopeVisualChunk(detail,()=>renderer.visualGroundHeightAt(detail.cx*64,detail.cy*64));
+  const angle=renderer.azimuth;
+  for(const direction of [0,Math.PI/2,Math.PI,Math.PI*1.5]){
+   renderer.azimuth=direction;
+   renderer.updateCamera();
+   renderer.gl.render(renderer.scene,renderer.viewCamera);
+  }
+  renderer.azimuth=angle;renderer.updateCamera();
+  return {before,crowns,groundVertex:first,treeGround:height};
+ });
+ for(const state of foliage.before.partial)assert.equal(state.depthWrite,false);
+ for(const state of foliage.before.full){
+  assert.equal(state.transparent,false,'El follaje y el terreno completos no deben mezclarse por transparencia');
+  assert.equal(state.depthWrite,true,'Árboles y suelo deben ocultarse correctamente por profundidad');
+ }
+ for(const state of foliage.before.receding)assert.equal(state.depthWrite,false);
+ assert.equal(foliage.before.restored,true,'El fundido no debe dejar los árboles permanentemente transparentes');
+ assert.ok(foliage.before.full[0].alphaTest>.3,'Preservar la textura recortada original de las hojas');
+ assert.equal(foliage.crowns.length,3);
+ for(const crown of foliage.crowns){
+  assert.ok(crown.x>0.5&&crown.y>0.5&&crown.z>0.5,'Copa 3D con volumen en todos los ejes '+crown.variant);
+  assert.ok(crown.triangles>10,'La copa debe tener superficies reales, no solo láminas');
+ }
+ assert.ok(Math.abs(foliage.groundVertex-foliage.treeGround)<.0001,'La vegetación debe apoyarse en la malla visible de terreno');
+
  await page.waitForTimeout(1200);
  await page.keyboard.down('d');await page.waitForTimeout(1500);await page.keyboard.up('d');
  await page.keyboard.down('s');await page.waitForTimeout(1500);await page.keyboard.up('s');
