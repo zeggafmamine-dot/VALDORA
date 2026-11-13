@@ -1,6 +1,7 @@
 import {planLine} from './paths.mjs';
 import {terrainSample,validCoordinates,REGION_SIZE} from './terrain.mjs';
 import {ChunkStore} from './chunks.mjs';
+import {QUARRY_RADIUS,STONE_PER_WORKER,stoneCapacity,stoneRemaining} from './stone-deposits.mjs';
 export const SIZE=64;
 export const SEASONS=[{name:'Primavera',short:'Prim.',temperature:14,color:'#a2bf76'},{name:'Verano',short:'Ver.',temperature:24,color:'#e7bd6b'},{name:'Otoño',short:'Oto.',temperature:10,color:'#c98e55'},{name:'Invierno',short:'Inv.',temperature:-5,color:'#b8d0dc'}];
 export const RESOURCES={wood:{name:'Madera',icon:'wood',color:'#c5a584'},stone:{name:'Piedra',icon:'stone',color:'#bcc4ca'},food:{name:'Alimentos',icon:'food',color:'#d9bf76'},firewood:{name:'Leña',icon:'fire',color:'#e6a06f'}};
@@ -11,7 +12,7 @@ export const BUILDINGS={
  fisher:{name:'Cabaña de pesca',category:'Alimentos',icon:'fish',w:2,h:2,cost:{wood:35,stone:10},days:5,maxWorkers:2,nearWater:true,description:'Pesca en el río durante todo el año. Constrúyela a un máximo de 4 casillas del agua.',detail:'2,6 alimentos por trabajador y día',color:'#8baeb1'},
  forester:{name:'Puesto forestal',category:'Recursos',icon:'tree',w:2,h:2,cost:{wood:25,stone:8},days:4,maxWorkers:2,description:'Tala y replanta el bosque cercano. Necesita árboles en un radio de 8 casillas.',detail:'Hasta 3 maderas por trabajador y día',color:'#87a779'},
  woodcutter:{name:'Leñador',category:'Recursos',icon:'axe',w:2,h:2,cost:{wood:20,stone:10},days:3,maxWorkers:1,description:'Convierte 2 unidades de madera en 5 de leña cada día. Esencial para el invierno.',detail:'2 madera → 5 leña por trabajador y día',color:'#ce9b75'},
- quarry:{name:'Cantera',category:'Recursos',icon:'pick',w:3,h:3,cost:{wood:40,stone:10},days:6,maxWorkers:2,description:'Extrae piedra para construir y ampliar tu aldea.',detail:'2 piedras por trabajador y día',color:'#a5b0b4'},
+ quarry:{name:'Cantera',category:'Recursos',icon:'pick',w:3,h:3,cost:{wood:40,stone:10},days:6,maxWorkers:2,description:'Extrae los depósitos rocosos cercanos hasta agotarlos definitivamente. Ubícala cerca de rocas.',detail:'2 piedras por trabajador y día · Yacimiento finito · Radio 9',color:'#a5b0b4'},
  pasture:{name:'Pastizal de ovejas',category:'Alimentos',icon:'sheep',w:3,h:3,cost:{wood:40,stone:10},days:5,maxWorkers:2,description:'Cría un pequeño rebaño que aporta alimentos durante todo el año.',detail:'2,4 alimentos por trabajador y día',color:'#c7d0aa'},
  well:{name:'Pozo',category:'Poblado',icon:'water',w:1,h:1,cost:{wood:12,stone:20},days:3,maxWorkers:0,description:'El agua limpia mejora la salud de toda la aldea en 10 puntos.',detail:'+10 salud',color:'#95b7c5'},
  market:{name:'Mercado',category:'Poblado',icon:'market',w:2,h:2,cost:{wood:45,stone:25},days:6,maxWorkers:0,description:'Un lugar de encuentro que aumenta la felicidad de los habitantes.',detail:'+12 felicidad',color:'#bf7b67'},
@@ -42,7 +43,7 @@ export class World{
   for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
   const noise=smooth(x/9,y/9,this.seedNumber),r=hash(x,y,this.seedNumber),center=44+Math.sin(y/7+this.seedNumber%6)*2.4+Math.cos(y/15)*2,river=Math.abs(x-center),lake=((x-46)/6)**2+((y-49)/7)**2;
   const water=river<1.8||lake<1,hill=(noise>.59&&x<23&&y<26)||(x<10&&y<14&&noise>.4),clear=Math.hypot(x-31,y-33)<8;
-  this.tiles.push({x,y,type:water?'water':hill?'hill':'grass',height:water?0:hill?7+Math.floor(noise*16):Math.floor(noise*3),variant:r,tree:!water&&!hill&&!clear&&r>(noise>.4?.35:.72),rock:!water&&!clear&&(hill?r>.45:r>.96),road:false,bridge:false,building:null,marked:false});
+  const tile={x,y,type:water?'water':hill?'hill':'grass',height:water?0:hill?7+Math.floor(noise*16):Math.floor(noise*3),variant:r,tree:!water&&!hill&&!clear&&r>(noise>.4?.35:.72),rock:!water&&!clear&&(hill?r>.45:r>.96),road:false,bridge:false,building:null,marked:false};tile.stoneLeft=tile.rock?stoneCapacity(tile):0;this.tiles.push(tile);
  }}
  // Las casillas usan coordenadas globales; solo el primer asentamiento tiene un claro inicial.
  proceduralTile(x,y){
@@ -51,7 +52,7 @@ export class World{
   const r=hash(gx,gy,this.seedNumber),clear=Math.hypot(x-31.5,y-32.5)<9.5;
   const type=ground.water?'water':ground.hill?'hill':'grass';
   const density=(.17+ground.moisture*.64)*(ground.height>1.5?.55:1);
-  return {x,y,type,height:ground.water?0:ground.hill?7+Math.floor(ground.height*2):Math.max(0,Math.floor(ground.height*1.3)),variant:r,tree:type==='grass'&&!clear&&r<density,rock:!ground.water&&!clear&&(ground.hill?r>.35:r>.97),road:false,bridge:false,building:this.buildingCells.get(x+','+y)||null,marked:false};
+  const tile={x,y,type,height:ground.water?0:ground.hill?7+Math.floor(ground.height*2):Math.max(0,Math.floor(ground.height*1.3)),variant:r,tree:type==='grass'&&!clear&&r<density,rock:!ground.water&&!clear&&(ground.hill?r>.35:r>.97),road:false,bridge:false,building:this.buildingCells.get(x+','+y)||null,marked:false};tile.stoneLeft=tile.rock?stoneCapacity(tile):0;return tile;
  }
  setViewRegion(x,y,force=false){
   if(this.terrainVersion!==3)return false;
@@ -70,7 +71,7 @@ export class World{
   return x>=0&&y>=0&&x<SIZE&&y<SIZE?this.tiles[y*SIZE+x]:null;
  }
  addInitial(type,x,y){const d=BUILDINGS[type],b={id:this.nextId++,type,x,y,w:d.w,h:d.h,progress:1,workers:0,paused:false};this.buildings.push(b);this.occupy(b);return b;}
- occupy(b){for(let dy=0;dy<b.h;dy++)for(let dx=0;dx<b.w;dx++){let t=this.tile(b.x+dx,b.y+dy);if(t){t.building=b.id;if(this.terrainVersion===3)this.buildingCells.set(t.x+','+t.y,b.id);t.tree=false;t.rock=false;t.road=false;t.marked=false;this.rememberTile(t);}}}
+ occupy(b){for(let dy=0;dy<b.h;dy++)for(let dx=0;dx<b.w;dx++){let t=this.tile(b.x+dx,b.y+dy);if(t){t.building=b.id;if(this.terrainVersion===3)this.buildingCells.set(t.x+','+t.y,b.id);t.tree=false;t.rock=false;t.stoneLeft=0;t.road=false;t.marked=false;this.rememberTile(t);}}}
  get population(){return this.citizens.length;}
  get capacity(){return this.buildings.filter(b=>b.type==='house'&&b.progress>=1).length*4;}
  get storage(){return 500+this.buildings.filter(b=>b.type==='warehouse'&&b.progress>=1).length*500;}
@@ -92,32 +93,87 @@ export class World{
    if(type==='road'&&t.road)return {ok:false,reason:'Ya existe un camino aquí.'};
   }
   if(d.nearWater&&!this.nearWater(x,y,d.w,d.h))return {ok:false,reason:'La cabaña debe estar a 4 casillas del río.'};
+   if(type==='quarry'&&!this.findQuarryDeposit({x,y,w:d.w,h:d.h}))return {ok:false,reason:'Busca rocas explotables a menos de 9 casillas.'};
   if(!this.canAfford(d.cost))return {ok:false,reason:'No hay suficientes recursos.'};
   return {ok:true,reason:d.days?'Clic para construir · Esc para cancelar':'Mantén pulsado para trazar'};
  }
  place(type,x,y){const result=this.canPlace(type,x,y);if(!result.ok)return result;const d=BUILDINGS[type];for(const [r,n]of Object.entries(d.cost))this.resources[r]-=n;
-  if(type==='road'||type==='bridge'){const t=this.tile(x,y);t[type]=true;t.tree=false;t.rock=false;this.rememberTile(t);return {ok:true};}
+  if(type==='road'||type==='bridge'){const t=this.tile(x,y);t[type]=true;t.tree=false;t.rock=false;t.stoneLeft=0;this.rememberTile(t);return {ok:true};}
   const b={id:this.nextId++,type,x,y,w:d.w,h:d.h,progress:0,workers:0,paused:false};this.buildings.push(b);this.occupy(b);this.log(`Comienza la construcción: ${d.name.toLowerCase()}.`);return {ok:true,building:b};
  }
  previewLine(type,start,end){return planLine(this,type,start,end);}
- placeLine(type,start,end){const plan=this.previewLine(type,start,end);if(!plan.ok)return plan;if(this.gameOver)return {...plan,ok:false,reason:'La partida ha terminado.'};for(const [key,n]of Object.entries(plan.cost))this.resources[key]-=n;const cleared=new Set();for(const p of plan.cells){if(!p.action)continue;const t=this.tile(p.x,p.y);t[p.action]=true;if(type==='bridge'){t.bridgeAxis=plan.axis;t.road=false;}t.tree=false;t.rock=false;t.marked=false;cleared.add(p.x+','+p.y);this.rememberTile(t);}this.gatherQueue=this.gatherQueue.filter(q=>!cleared.has(q.x+','+q.y));if(plan.count)this.log(`${type==='road'?'Camino':'Puente'} completado: ${plan.count} tramos.`, 'success');return plan;}
+ placeLine(type,start,end){const plan=this.previewLine(type,start,end);if(!plan.ok)return plan;if(this.gameOver)return {...plan,ok:false,reason:'La partida ha terminado.'};for(const [key,n]of Object.entries(plan.cost))this.resources[key]-=n;const cleared=new Set();for(const p of plan.cells){if(!p.action)continue;const t=this.tile(p.x,p.y);t[p.action]=true;if(type==='bridge'){t.bridgeAxis=plan.axis;t.road=false;}t.tree=false;t.rock=false;t.stoneLeft=0;t.marked=false;cleared.add(p.x+','+p.y);this.rememberTile(t);}this.gatherQueue=this.gatherQueue.filter(q=>!cleared.has(q.x+','+q.y));if(plan.count)this.log(`${type==='road'?'Camino':'Puente'} completado: ${plan.count} tramos.`, 'success');return plan;}
  markGather(x,y){const t=this.tile(x,y);if(!t||(!t.tree&&!t.rock))return {ok:false,reason:'Selecciona un árbol o una roca.'};if(t.marked)return {ok:false,reason:'Ya está marcado para recoger.'};t.marked=true;this.rememberTile(t);this.gatherQueue.push({x:t.x,y:t.y,progress:0});return {ok:true};}
  demolish(id){const b=this.buildings.find(b=>b.id===id);if(!b||b.type==='hall')return false;const d=BUILDINGS[b.type];for(const [r,n]of Object.entries(d.cost))this.resources[r]=Math.min(this.storage,this.resources[r]+Math.floor(n*.5));for(let dy=0;dy<b.h;dy++)for(let dx=0;dx<b.w;dx++){const t=this.tile(b.x+dx,b.y+dy);if(t){t.building=null;if(this.terrainVersion===3)this.buildingCells.delete(t.x+','+t.y);this.rememberTile(t);}}this.buildings=this.buildings.filter(v=>v.id!==id);this.assignJobs();this.log(`${d.name}: recuperado el 50 % de los materiales.`);return true;}
  addCitizen(){const i=this.nextId++;this.citizens.push({id:i,name:NAMES[(i-6)%NAMES.length]||'Colono',age:18+Math.floor(hash(i,3,this.seedNumber)*32),x:30.5+hash(i,1),y:32+hash(i,2),job:null,path:[],wait:0,color:['#c3a76d','#9cab98','#ad7361','#d0bd94','#8cabb5','#9e909f'][i%6]});}
  assignJobs(){let free=this.citizens.slice();for(const c of free)c.job=null;for(const b of this.buildings){if(b.progress<1)b.workers=0;const want=Math.min(b.workers,free.length,BUILDINGS[b.type].maxWorkers);b.workers=want;for(let n=0;n<want;n++)free.shift().job=b.id;}}
  changeWorkers(id,amount){const b=this.buildings.find(v=>v.id===id);if(!b||b.progress<1)return false;const cap=BUILDINGS[b.type].maxWorkers;if(amount>0&&(this.idle<=0||b.workers>=cap))return false;if(amount<0&&b.workers<=0)return false;b.workers=Math.max(0,Math.min(cap,b.workers+amount));this.assignJobs();return true;}
+ // Identifica el depósito visible más cercano, sin excavar bajo edificios o caminos.
+ findQuarryDeposit(b){
+  const cx=b.x+b.w/2,cy=b.y+b.h/2,r=QUARRY_RADIUS;
+  if(b.targetStone&&Number.isSafeInteger(b.targetStone.x)&&Number.isSafeInteger(b.targetStone.y)){
+   const t=this.tile(b.targetStone.x,b.targetStone.y);
+   if(t&&stoneRemaining(t)>0&&t.rock&&!t.building&&!t.road&&!t.bridge&&
+    Math.hypot(t.x+.5-cx,t.y+.5-cy)<=r)return t;
+  }
+  let best=null,smallest=Infinity;
+  for(let y=Math.floor(cy-r);y<=Math.ceil(cy+r);y++)for(let x=Math.floor(cx-r);x<=Math.ceil(cx+r);x++){
+   if(x>=b.x&&x<b.x+b.w&&y>=b.y&&y<b.y+b.h)continue;
+   const distance=(x+.5-cx)**2+(y+.5-cy)**2;
+   if(distance>r*r||distance>=smallest)continue;
+   const t=this.tile(x,y);
+   if(t&&t.rock&&stoneRemaining(t)>0&&!t.building&&!t.road&&!t.bridge){best=t;smallest=distance;}
+  }
+  if(best)b.targetStone={x:best.x,y:best.y};
+  else b.targetStone=null;
+  return best;
+ }
+ // Las canteras comparten el mismo inventario mineral. No hay extracción ficticia.
+ mineQuarry(b,amount){
+  const free=Math.max(0,this.storage-this.resources.stone);
+  let toMine=Math.min(Math.max(0,amount),free),extracted=0;
+  if(toMine===0)return 0;
+  while(toMine>0){
+   const t=this.findQuarryDeposit(b);
+   if(!t)break;
+   const mined=Math.min(toMine,stoneRemaining(t));
+   if(mined<=0)break;
+   t.stoneLeft=stoneRemaining(t)-mined;t.rock=t.stoneLeft>0;
+   if(!t.rock){t.marked=false;b.targetStone=null;this.gatherQueue=this.gatherQueue.filter(q=>q.x!==t.x||q.y!==t.y);}
+   this.rememberTile(t);extracted+=mined;toMine-=mined;
+  }
+  if(extracted>0){this.resources.stone+=extracted;b.exhausted=false;}
+  else if(!b.exhausted&&free>0){b.exhausted=true;this.log('La cantera ha agotado las rocas de su entorno. Busca otro yacimiento.','info');}
+  return extracted;
+ }
+ // Reserva visible del radio de trabajo, útil en el panel del edificio.
+ stoneAround(b){
+  const cx=b.x+b.w/2,cy=b.y+b.h/2,r=QUARRY_RADIUS;
+  let total=0;
+  for(let y=Math.floor(cy-r);y<=Math.ceil(cy+r);y++)for(let x=Math.floor(cx-r);x<=Math.ceil(cx+r);x++){
+   if((x+.5-cx)**2+(y+.5-cy)**2>r*r)continue;
+   const t=this.tile(x,y);
+   if(t&&t.rock&&!t.building&&!t.road&&!t.bridge)total+=stoneRemaining(t);
+  }
+  return total;
+ }
  forestAt(b,radius=7){let trees=0;for(let y=b.y-radius;y<b.y+radius;y++)for(let x=b.x-radius;x<b.x+radius;x++)if(this.tile(x,y)?.tree)trees++;return Math.min(1,trees/18);}
  tick(){if(this.gameOver)return;this.totalDays++;this.day++;if(this.day>30){this.day=1;this.season++;if(this.season>3){this.season=0;this.year++;}this.newSeason();}
   const before={...this.resources};
   const unfinished=this.buildings.filter(b=>b.progress<1),builders=this.builders;
   if(unfinished.length&&builders>0){let effort=builders/2;for(const b of unfinished){const d=BUILDINGS[b.type],needed=(1-b.progress)*d.days,use=Math.min(effort,needed);b.progress=Math.min(1,b.progress+use/d.days);effort-=use;if(b.progress>=.99999){b.progress=1;b.workers=Math.min(d.maxWorkers,Math.max(0,this.idle-1));this.assignJobs();this.log(`${d.name}: construcción terminada.`,'success');}if(effort<=0)break;}}
-  if(builders>0&&this.gatherQueue.length){const q=this.gatherQueue[0];q.progress+=builders*.5;if(q.progress>=1){const t=this.tile(q.x,q.y);if(t?.tree){this.resources.wood+=12;t.tree=false;}if(t?.rock){this.resources.stone+=10;t.rock=false;}if(t){t.marked=false;this.rememberTile(t);}this.gatherQueue.shift();}}
+  if(builders>0&&this.gatherQueue.length){const q=this.gatherQueue[0];q.progress+=builders*.5;if(q.progress>=1){const t=this.tile(q.x,q.y);if(t?.tree){this.resources.wood+=12;t.tree=false;}if(t?.rock){
+    const extracted=Math.min(10,stoneRemaining(t),Math.max(0,this.storage-this.resources.stone));
+    this.resources.stone+=extracted;t.stoneLeft=stoneRemaining(t)-extracted;t.rock=t.stoneLeft>0;
+   }
+   if(t){t.marked=!!t.rock;this.rememberTile(t);}
+   if(t?.rock){q.progress=0;}else this.gatherQueue.shift();}}
   for(const b of this.buildings){if(b.progress<1||b.paused||!b.workers)continue;const w=b.workers;
    if(b.type==='farm')this.resources.food+=[2,3,4,0][this.season]*w;
    if(b.type==='gatherer')this.resources.food+=3*w*this.forestAt(b)*(this.season===3?.6:1);
    if(b.type==='fisher')this.resources.food+=2.6*w;
    if(b.type==='pasture')this.resources.food+=2.4*w;
-   if(b.type==='quarry')this.resources.stone+=2*w;
+   if(b.type==='quarry')this.mineQuarry(b,STONE_PER_WORKER*w);
    if(b.type==='forester'){this.resources.wood+=3*w*this.forestAt(b,8);if(this.totalDays%3===0){for(let tries=0;tries<12;tries++){let x=b.x+Math.floor(hash(this.totalDays+tries,1,this.seedNumber)*16)-8,y=b.y+Math.floor(hash(1,this.totalDays+tries,this.seedNumber)*16)-8,t=this.tile(x,y);if(t&&t.type==='grass'&&!t.building&&!t.road&&!t.rock&&!t.tree){t.tree=true;this.rememberTile(t);break;}}}}
    if(b.type==='woodcutter'){const input=Math.min(this.resources.wood,2*w);this.resources.wood-=input;this.resources.firewood+=input*2.5;}
   }
@@ -164,7 +220,7 @@ export class World{
  serialize(){
   const common={terrainVersion:this.terrainVersion,coordinates:this.coordinates,seed:this.seed,day:this.day,year:this.year,season:this.season,resources:this.resources,health:this.health,happiness:this.happiness,nextId:this.nextId,buildings:this.buildings,citizens:this.citizens.map(c=>({...c,path:[]})),events:this.events,gatherQueue:this.gatherQueue,milestones:this.milestones,history:this.history,totalDays:this.totalDays,starveDays:this.starveDays,coldDays:this.coldDays,gameOver:this.gameOver,won:this.won};
   if(this.terrainVersion===3)return {...common,version:2,tileChanges:this.chunks.exportChanges(),viewRegion:this.viewRegion,cameraPosition:this.cameraPosition||null};
-  return {...common,version:1,tiles:this.tiles.map(t=>({tree:t.tree,rock:t.rock,road:t.road,bridge:t.bridge,bridgeAxis:t.bridgeAxis,marked:t.marked}))};
+  return {...common,version:1,tiles:this.tiles.map(t=>({tree:t.tree,rock:t.rock,stoneLeft:stoneRemaining(t),road:t.road,bridge:t.bridge,bridgeAxis:t.bridgeAxis,marked:t.marked}))};
  }
  restore(data){
   const validInt=(n,min,max)=>Number.isSafeInteger(n)&&n>=min&&n<=max;
@@ -205,6 +261,9 @@ export class World{
    const state=data.tiles[i];if(!state||typeof state!=='object')throw Error('Terreno no válido');
    const before=[t.tree,t.rock,t.road,t.bridge,t.bridgeAxis,t.marked];
    for(const k of ['tree','rock','road','bridge','marked'])t[k]=state[k]===true;
+   t.stoneLeft=state.stoneLeft===undefined?(t.rock?stoneCapacity(t):0):state.stoneLeft;
+   if(!Number.isInteger(t.stoneLeft)||t.stoneLeft<0||t.stoneLeft>40)throw Error('Piedra no válida');
+   t.rock=t.rock&&t.stoneLeft>0;
    t.bridgeAxis=['x','y'].includes(state.bridgeAxis)?state.bridgeAxis:undefined;
    if(this.terrainVersion===3&&before.some((v,j)=>v!==[t.tree,t.rock,t.road,t.bridge,t.bridgeAxis,t.marked][j]))this.rememberTile(t);
   });
