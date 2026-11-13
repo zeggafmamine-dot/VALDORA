@@ -55,8 +55,31 @@ export class Renderer{
  createTreeMeshes(){for(const inst of this.treeInstances){this.staticGroup.remove(inst);inst.geometry.dispose();}this.treeInstances=[];const all=(this.world.renderTiles||this.world.tiles).filter(t=>t.tree&&this.heightAt(t.x+.5,t.y+.5)>.2);this.knownTrees=new Set((this.world.renderTiles||this.world.tiles).filter(t=>t.tree));const lists=[[],[],[]];for(const t of all)lists[t.variant>.55?0:t.variant>.4?1:2].push(t);this.treeTiles=all;
   for(let v=0;v<3;v++){const model=treeModel(this.materials,v),tiles=lists[v];if(!tiles.length)continue;for(const source of model.children){const inst=new T.InstancedMesh(source.geometry,source.material,tiles.length);inst.castShadow=true;inst.receiveShadow=true;inst.instanceMatrix.setUsage(T.DynamicDrawUsage);inst.userData={variant:v,tiles,foliage:source.material!==this.materials.bark};this.staticGroup.add(inst);this.treeInstances.push(inst);}}
  }
- makeVegetation(){this.createTreeMeshes();
-  const grassGeo=new T.PlaneGeometry(.28,.36);grassGeo.translate(0,.18,0);this.grassTiles=(this.world.renderTiles||this.world.tiles).filter(t=>t.type==='grass'&&!t.building&&!t.road&&!t.tree&&t.variant>.45);const grassCount=this.grassTiles.length*4;this.grassInst=new T.InstancedMesh(grassGeo,this.materials.grass,Math.max(1,grassCount));this.grassInst.receiveShadow=true;this.grassInst.visible=this.quality==='high';this.staticGroup.add(this.grassInst);let gi=0;for(const t of this.grassTiles)for(let i=0;i<4;i++){const x=t.x+hash(i,t.x),z=t.y+hash(i,t.y,4);this.dummy.position.set(x,this.heightAt(x,z),z);this.dummy.rotation.set(0,hash(i,t.x+t.y)*Math.PI*2,0);this.dummy.scale.setScalar(.55+hash(i,4)*.65);this.dummy.updateMatrix();this.grassInst.setMatrixAt(gi++,this.dummy.matrix);}this.grassInst.instanceMatrix.needsUpdate=true;this.refreshTrees();
+ makeVegetation(){
+  this.createTreeMeshes();
+  // La hierba 3D se oculta en Ligera/Equilibrada. No crear miles de
+  // instancias ni calcular su relieve cuando el usuario no puede verlas.
+  this.grassTiles=(this.world.renderTiles||this.world.tiles).filter(t=>t.type==='grass'&&!t.building&&!t.road&&!t.tree&&t.variant>.45);
+  this.grassInst=null;
+  if(this.quality==='high')this.createGrassInstances();
+  this.refreshTrees();
+ }
+ createGrassInstances(){
+  if(this.grassInst)return;
+  const grassGeo=new T.PlaneGeometry(.28,.36);grassGeo.translate(0,.18,0);
+  const tiles=this.grassTiles||[],grassCount=tiles.length*4;
+  this.grassInst=new T.InstancedMesh(grassGeo,this.materials.grass,Math.max(1,grassCount));
+  this.grassInst.receiveShadow=true;this.grassInst.visible=true;this.staticGroup.add(this.grassInst);
+  if(!grassCount){this.dummy.scale.setScalar(0);this.dummy.updateMatrix();this.grassInst.setMatrixAt(0,this.dummy.matrix);}
+  let gi=0;
+  for(const t of tiles)for(let i=0;i<4;i++){
+   const x=t.x+hash(i,t.x),z=t.y+hash(i,t.y,4);
+   this.dummy.position.set(x,this.heightAt(x,z),z);
+   this.dummy.rotation.set(0,hash(i,t.x+t.y)*Math.PI*2,0);
+   this.dummy.scale.setScalar(.55+hash(i,4)*.65);this.dummy.updateMatrix();
+   this.grassInst.setMatrixAt(gi++,this.dummy.matrix);
+  }
+  this.grassInst.instanceMatrix.needsUpdate=true;
  }
  refreshTrees(){if((this.world.renderTiles||this.world.tiles).some(t=>t.tree&&!this.knownTrees.has(t)))this.createTreeMeshes();const pal=seasonColors[this.world.season];for(const inst of this.treeInstances){const {tiles,variant,foliage}=inst.userData;for(let i=0;i<tiles.length;i++){const t=tiles[i],r=hash(t.x,t.y,this.world.seedNumber+65),x=t.x+.25+r*.5,z=t.y+.25+hash(t.y,t.x)*.5,size=.62+r*.5;this.dummy.position.set(x,this.heightAt(x,z),z);this.dummy.rotation.set(0,r*Math.PI*2,0);this.dummy.scale.set(size*(t.tree?1:0),size*(.9+hash(t.x,t.y)*.2)*(t.tree?1:0),size*(t.tree?1:0));this.dummy.updateMatrix();inst.setMatrixAt(i,this.dummy.matrix);const color=new T.Color(foliage?(variant===2?pal.oak:pal.pine):'#d8cfb9');color.multiplyScalar(.78+r*.3);if(t.marked)color.lerp(new T.Color('#d7b261'),.4);inst.setColorAt(i,color);}inst.instanceMatrix.needsUpdate=true;if(inst.instanceColor)inst.instanceColor.needsUpdate=true;inst.computeBoundingSphere();}this.gl.shadowMap.needsUpdate=true;}
  makeRocks(){const tiles=(this.world.renderTiles||this.world.tiles).filter(t=>t.rock||t.stoneScar);const geom=new T.DodecahedronGeometry(1,1),p=geom.getAttribute('position');for(let i=0;i<p.count;i++){const r=hash(Math.round(p.getX(i)*10),Math.round(p.getY(i)*10),75);p.setXYZ(i,p.getX(i)*(.85+r*.3),p.getY(i)*(.7+r*.5),p.getZ(i)*(.85+r*.3));}geom.computeVertexNormals();this.rockTiles=tiles;this.rockInstances=new T.InstancedMesh(geom,this.materials.rock,Math.max(1,tiles.length));this.rockInstances.castShadow=this.rockInstances.receiveShadow=true;this.staticGroup.add(this.rockInstances);
@@ -67,7 +90,7 @@ export class Renderer{
   this.refreshRocks();
   // Smaller stones soften the riverbank without changing gameplay terrain.
   const pebbles=(this.world.renderTiles||this.world.tiles).filter(t=>t.type==='grass'&&this.heightAt(t.x+.5,t.y+.5)<.43&&t.variant>.5);const rocks=new T.InstancedMesh(geom,this.materials.rock,Math.max(1,pebbles.length));for(let i=0;i<pebbles.length;i++){const t=pebbles[i],r=t.variant;this.dummy.position.set(t.x+.5,this.heightAt(t.x+.5,t.y+.5),t.y+.5);this.dummy.scale.set(.15+r*.12,.08+r*.09,.13+r*.12);this.dummy.rotation.set(r,r*6,r);this.dummy.updateMatrix();rocks.setMatrixAt(i,this.dummy.matrix);}rocks.receiveShadow=true;this.staticGroup.add(rocks);}
- refreshGrass(){let i=0;for(const t of this.grassTiles)for(let j=0;j<4;j++){const x=t.x+hash(j,t.x),z=t.y+hash(j,t.y,4);this.dummy.position.set(x,this.heightAt(x,z),z);this.dummy.rotation.set(0,hash(j,t.x+t.y)*Math.PI*2,0);this.dummy.scale.setScalar(t.building||t.road||t.tree?0:.55+hash(j,4)*.65);this.dummy.updateMatrix();this.grassInst.setMatrixAt(i++,this.dummy.matrix);}this.grassInst.instanceMatrix.needsUpdate=true;}
+ refreshGrass(){if(!this.grassInst)return;let i=0;for(const t of this.grassTiles)for(let j=0;j<4;j++){const x=t.x+hash(j,t.x),z=t.y+hash(j,t.y,4);this.dummy.position.set(x,this.heightAt(x,z),z);this.dummy.rotation.set(0,hash(j,t.x+t.y)*Math.PI*2,0);this.dummy.scale.setScalar(t.building||t.road||t.tree?0:.55+hash(j,4)*.65);this.dummy.updateMatrix();this.grassInst.setMatrixAt(i++,this.dummy.matrix);}this.grassInst.instanceMatrix.needsUpdate=true;}
  refreshRocks(){
   const colors=['#857c6b','#a19b8c','#b1ad9d','#bcb9a9','#c9c7b6'];
   for(let i=0;i<this.rockTiles.length;i++){
@@ -352,7 +375,15 @@ export class Renderer{
  }
  updateSeason(){const s=this.world.season,p=seasonColors[s];this.lastSeason=s;this.scene.background.set(p.sky);this.scene.fog.color.set(p.sky);this.sun.color.set(p.sun);this.sun.intensity=s===3?1.8:2.5;this.water.material.uniforms.uCold.value=s===3?1:0;this.water.material.uniforms.uSky.value.set(p.sky);this.materials.grass.color.set(s===3?'#c3c9b8':s===2?'#9c8c58':'#8a965d');this.materials.roof.color.set(s===3?'#f1f0e7':'#d5cabb');this.sky.material.uniforms.uHorizon.value.set(p.sky);this.sky.material.uniforms.uCold.value=s===3?1:0;this.materials.thatch.color.set(s===3?'#d6d8c8':'#c5b382');if(this.chunkVisuals){for(const chunk of this.chunkVisuals.values())this.scopeVisualChunk(chunk,()=>{this.colorTerrain();if(chunk.detail)this.refreshTrees();});}else{this.colorTerrain();this.refreshTrees();}this.syncBuildings();this.miniKey='';}
  invalidate(){this.lastDay=-1;this.lastVisualKey='';this.miniKey='';}
- setQuality(q){if(!['low','medium','high'].includes(q))q='low';this.quality=q;if(q!=='low'&&!this.post)this.post=createPostprocessing(this.gl,this.width,this.height);this.gl.setPixelRatio(q==='high'?Math.min(devicePixelRatio||1,2):1);this.gl.shadowMap.enabled=q!=='low';const shadowSize=q==='high'?4096:q==='medium'?2048:1024;if(this.sun.shadow.mapSize.x!==shadowSize){this.sun.shadow.mapSize.set(shadowSize,shadowSize);this.sun.shadow.map?.dispose();this.sun.shadow.map=null;}if(this.chunkVisuals){for(const chunk of this.chunkVisuals.values())if(chunk.grassInst)chunk.grassInst.visible=q==='high';}else if(this.grassInst)this.grassInst.visible=q==='high';if(this.post)this.post.uniforms.uAO.value=q==='low'?0:q==='high'?1:.65;this.river.quality=q;this.resize();this.gl.shadowMap.needsUpdate=true;}
+ setQuality(q){if(!['low','medium','high'].includes(q))q='low';this.quality=q;if(q!=='low'&&!this.post)this.post=createPostprocessing(this.gl,this.width,this.height);this.gl.setPixelRatio(q==='high'?Math.min(devicePixelRatio||1,2):1);this.gl.shadowMap.enabled=q!=='low';const shadowSize=q==='high'?4096:q==='medium'?2048:1024;if(this.sun.shadow.mapSize.x!==shadowSize){this.sun.shadow.mapSize.set(shadowSize,shadowSize);this.sun.shadow.map?.dispose();this.sun.shadow.map=null;}if(this.chunkVisuals){
+   for(const chunk of this.chunkVisuals.values())if(chunk.detail){
+    if(q==='high'&&!chunk.grassInst)this.scopeVisualChunk(chunk,()=>this.createGrassInstances());
+    if(chunk.grassInst)chunk.grassInst.visible=q==='high';
+   }
+  }else{
+   if(q==='high'&&!this.grassInst)this.createGrassInstances();
+   if(this.grassInst)this.grassInst.visible=q==='high';
+  }if(this.post)this.post.uniforms.uAO.value=q==='low'?0:q==='high'?1:.65;this.river.quality=q;this.resize();this.gl.shadowMap.needsUpdate=true;}
  draw(time){
   if(this.contextLost)return;this.time=time;
   if(this.lastSeason!==this.world.season)this.updateSeason();
