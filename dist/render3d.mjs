@@ -199,6 +199,17 @@ export class Renderer{
    chunk.opacity=approachOpacity(chunk.opacity,target,dt);
    if(Math.abs(chunk.opacity-target)<.001)chunk.opacity=target;
    for(const material of chunk.fade.materials)material.opacity=chunk.opacity;
+   const distance=chunkDistance(chunk.cx,chunk.cy,this.camera.x,this.camera.y);
+   if(!chunk.detail&&distance<120&&time-this.lastDetailBuild>.11){
+    this.addVisualDetail(chunk);this.lastDetailBuild=time;
+   }
+   if(chunk.detail){
+    const targetDetail=Math.max(0,Math.min(1,(122-distance)/42));
+    chunk.detailOpacity=approachOpacity(chunk.detailOpacity,targetDetail,dt);
+    if(Math.abs(chunk.detailOpacity-targetDetail)<.001)chunk.detailOpacity=targetDetail;
+    for(const material of chunk.detailFade.materials)material.opacity=chunk.opacity*chunk.detailOpacity;
+    if(distance>152&&chunk.detailOpacity<.003)this.removeVisualDetail(chunk);
+   }
    if(target===0&&chunk.opacity<.003)this.dropVisualChunk(chunk);
   }
   // En desplazamientos extremadamente rápidos, la memoria gráfica sigue acotada.
@@ -228,7 +239,7 @@ export class Renderer{
   }else if(this.ghost)this.ghost.visible=false;
   this.selectedRing.visible=!!b&&['gatherer','forester'].includes(b.type);if(this.selectedRing.visible){const points=[];for(let i=0;i<65;i++){const a=i/64*Math.PI*2,x=b.x+b.w/2+Math.cos(a)*7,z=b.y+b.h/2+Math.sin(a)*7;points.push(new T.Vector3(x,this.heightAt(x,z)+.04,z));}this.selectedRing.geometry.dispose();this.selectedRing.geometry=new T.BufferGeometry().setFromPoints(points);}
  }
- updateSeason(){const s=this.world.season,p=seasonColors[s];this.lastSeason=s;this.scene.background.set(p.sky);this.scene.fog.color.set(p.sky);this.sun.color.set(p.sun);this.sun.intensity=s===3?1.8:2.5;this.water.material.uniforms.uCold.value=s===3?1:0;this.water.material.uniforms.uSky.value.set(p.sky);this.materials.grass.color.set(s===3?'#c3c9b8':s===2?'#9c8c58':'#8a965d');this.materials.roof.color.set(s===3?'#f1f0e7':'#d5cabb');this.sky.material.uniforms.uHorizon.value.set(p.sky);this.sky.material.uniforms.uCold.value=s===3?1:0;this.materials.thatch.color.set(s===3?'#d6d8c8':'#c5b382');if(this.chunkVisuals){for(const chunk of this.chunkVisuals.values())this.scopeVisualChunk(chunk,()=>{this.colorTerrain();this.refreshTrees();});}else{this.colorTerrain();this.refreshTrees();}this.syncBuildings();this.miniKey='';}
+ updateSeason(){const s=this.world.season,p=seasonColors[s];this.lastSeason=s;this.scene.background.set(p.sky);this.scene.fog.color.set(p.sky);this.sun.color.set(p.sun);this.sun.intensity=s===3?1.8:2.5;this.water.material.uniforms.uCold.value=s===3?1:0;this.water.material.uniforms.uSky.value.set(p.sky);this.materials.grass.color.set(s===3?'#c3c9b8':s===2?'#9c8c58':'#8a965d');this.materials.roof.color.set(s===3?'#f1f0e7':'#d5cabb');this.sky.material.uniforms.uHorizon.value.set(p.sky);this.sky.material.uniforms.uCold.value=s===3?1:0;this.materials.thatch.color.set(s===3?'#d6d8c8':'#c5b382');if(this.chunkVisuals){for(const chunk of this.chunkVisuals.values())this.scopeVisualChunk(chunk,()=>{this.colorTerrain();if(chunk.detail)this.refreshTrees();});}else{this.colorTerrain();this.refreshTrees();}this.syncBuildings();this.miniKey='';}
  invalidate(){this.lastDay=-1;this.lastVisualKey='';this.miniKey='';}
  setQuality(q){this.quality=q;this.gl.setPixelRatio(q==='high'?Math.min(devicePixelRatio||1,2):1);this.gl.shadowMap.enabled=q!=='low';const shadowSize=q==='high'?4096:q==='medium'?2048:1024;if(this.sun.shadow.mapSize.x!==shadowSize){this.sun.shadow.mapSize.set(shadowSize,shadowSize);this.sun.shadow.map?.dispose();this.sun.shadow.map=null;}if(this.chunkVisuals){for(const chunk of this.chunkVisuals.values())if(chunk.grassInst)chunk.grassInst.visible=q==='high';}else if(this.grassInst)this.grassInst.visible=q==='high';this.post.uniforms.uAO.value=q==='low'?0:q==='high'?1:.65;this.river.quality=q;this.resize();this.gl.shadowMap.needsUpdate=true;}
  draw(time){
@@ -278,7 +289,7 @@ export class Renderer{
   if(this.terrain){this.scene.remove(this.terrain);this.terrain.geometry.dispose();this.terrain=null;}
   this.world=w;this.chunkVisuals=w.terrainVersion===3?new Map():null;
   this.linePreview=null;this.selected=null;this.buildMode=null;this.gatherMode=false;
-  this.lastDay=-1;this.lastSeason=-1;this.lastVisualKey='';this.lastVisualTime=0;this.lastVisualBuild=-100;
+  this.lastDay=-1;this.lastSeason=-1;this.lastVisualKey='';this.lastVisualTime=0;this.lastVisualBuild=-100;this.lastDetailBuild=-100;
   this.river.refreshBed(this.heightAt.bind(this),{x:w.terrainVersion===3?w.viewRegion.x*SIZE+32:32,y:w.terrainVersion===3?w.viewRegion.y*SIZE+32:32});
   if(this.chunkVisuals)this.makeVisualChunk(w.viewRegion.x,w.viewRegion.y,1);
   else{this.makeTerrain();this.makeVegetation();this.makeRocks();this.makeRoads();}
