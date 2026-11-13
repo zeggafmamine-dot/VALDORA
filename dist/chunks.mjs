@@ -1,6 +1,6 @@
 // Cache acotada de sectores. El mundo es determinista; solo se guardan las modificaciones del jugador.
-export const CHUNK_SIZE=16;
-export const CHUNK_LIMIT=80;
+export const CHUNK_SIZE=64;
+export const CHUNK_LIMIT=25;
 export const VIEW_SIZE=64;
 const key=(x,y)=>x+','+y;
 const valid=n=>Number.isSafeInteger(n)&&Math.abs(n)<Number.MAX_SAFE_INTEGER/4;
@@ -8,7 +8,8 @@ export class ChunkStore{
  constructor(createTile){this.createTile=createTile;this.cache=new Map();this.changes=new Map();this.region={x:0,y:0};}
  get chunkCount(){return this.cache.size;}
  get changedCount(){return this.changes.size;}
- isActive(cx,cy){return cx>=this.region.x*4-2&&cx<this.region.x*4+6&&cy>=this.region.y*4-2&&cy<this.region.y*4+6;}
+ // La región de juego y cada sector comparten el mismo tamaño: 64 × 64.
+ isActive(cx,cy){return Math.abs(cx-this.region.x)<=1&&Math.abs(cy-this.region.y)<=1;}
  getChunk(cx,cy){
   const k=key(cx,cy);
   if(this.cache.has(k)){const value=this.cache.get(k);this.cache.delete(k);this.cache.set(k,value);return value;}
@@ -39,15 +40,37 @@ export class ChunkStore{
   if(!valid(rx)||!valid(ry))return null;
   this.region={x:rx,y:ry};const tiles=[];
   for(let y=ry*VIEW_SIZE;y<(ry+1)*VIEW_SIZE;y++)for(let x=rx*VIEW_SIZE;x<(rx+1)*VIEW_SIZE;x++)tiles.push(this.tile(x,y));
-  this.trim();return tiles;
+  this.queueNearby();this.trim();return tiles;
+ }
+ // Se preparan gradualmente los sectores vecinos antes de que lleguen a la cámara.
+ queueNearby(){
+  this.pending=[];this.pendingKeys=new Set();
+  for(let radius=1;radius<=2;radius++)for(let dy=-radius;dy<=radius;dy++)for(let dx=-radius;dx<=radius;dx++){
+   if(Math.max(Math.abs(dx),Math.abs(dy))!==radius)continue;
+   const cx=this.region.x+dx,cy=this.region.y+dy,k=key(cx,cy);
+   if(!this.cache.has(k)&&!this.pendingKeys.has(k)){this.pending.push({cx,cy});this.pendingKeys.add(k);}
+  }
+ }
+ prefetchNext(maxChunks=1){
+  if(!Number.isInteger(maxChunks)||maxChunks<1)return 0;
+  let done=0;
+  while(done<maxChunks&&this.pending?.length){
+   const {cx,cy}=this.pending.shift();this.pendingKeys.delete(key(cx,cy));
+   if(Math.abs(cx-this.region.x)>2||Math.abs(cy-this.region.y)>2||this.cache.has(key(cx,cy)))continue;
+   this.getChunk(cx,cy);done++;
+  }
+  return done;
  }
  trim(){
   if(this.cache.size<=CHUNK_LIMIT)return;
+  // Primero descartar sectores lejanos, manteniendo lo visible (radio 1).
   for(const k of [...this.cache.keys()]){
    if(this.cache.size<=CHUNK_LIMIT)break;
    const [cx,cy]=k.split(',').map(Number);
    if(!this.isActive(cx,cy))this.cache.delete(k);
   }
+  // Las consultas de simulación fuera del encuadre no deben hacer crecer la caché.
+  while(this.cache.size>CHUNK_LIMIT)this.cache.delete(this.cache.keys().next().value);
  }
  exportChanges(){return [...this.changes].map(([xy,state])=>{const [x,y]=xy.split(',').map(Number);return [x,y,+state.tree,+state.rock,+state.road,+state.bridge,state.bridgeAxis==='x'?1:state.bridgeAxis==='y'?2:0,+state.marked];});}
  importChanges(records){
