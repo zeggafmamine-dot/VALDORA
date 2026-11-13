@@ -5,12 +5,12 @@ export const STONE_PER_WORKER=2;
 export const MAX_STONE_PER_TILE=40;
 
 export function stoneCapacity(tile){
- if(!tile||tile.type==='water')return 0;
+ if(!tile||tile.type==='water'||tile.biome==='alpine')return 0;
  const v=Number.isFinite(tile.variant)?Math.max(0,Math.min(1,tile.variant)):0;
  return tile.type==='hill'?22+Math.floor(v*16):12+Math.floor(v*12);
 }
 export function stoneRemaining(tile){
- if(!tile)return 0;
+ if(!tile||tile.biome==='alpine')return 0;
  if(Number.isInteger(tile.stoneLeft))return Math.max(0,Math.min(MAX_STONE_PER_TILE,tile.stoneLeft));
  // Compatibilidad de partidas previas, que solo guardaban rock: true/false.
  return tile.rock?stoneCapacity(tile):0;
