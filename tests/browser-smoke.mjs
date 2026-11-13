@@ -76,7 +76,10 @@ try{
  assert.equal(await page.evaluate(()=>localStorage.getItem('valdora-sidebar-open')),'true');
  // Cambiar tamaño no debe reabrir accidentalmente el cajón en móvil.
  await page.setViewportSize({width:390,height:800});
- await page.waitForTimeout(100);
+ await page.waitForFunction(()=>{
+  return window.matchMedia('(max-width:700px)').matches&&
+   document.getElementById('sidebar-toggle').getAttribute('aria-expanded')==='false';
+ },null,{timeout:12000});
  assert.equal(await toggle.getAttribute('aria-expanded'),'false');
  assert.equal(await panel.evaluate(el=>el.inert),true);
  await page.locator('#mobile-build').click();
