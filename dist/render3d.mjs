@@ -11,17 +11,24 @@ const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 const lerp=(a,b,t)=>a+(b-a)*t;
 const smooth=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);};
 function noise(x,z,seed){const a=Math.floor(x),b=Math.floor(z),u=smooth(0,1,x-a),v=smooth(0,1,z-b);return lerp(lerp(hash(a,b,seed),hash(a+1,b,seed),u),lerp(hash(a,b+1,seed),hash(a+1,b+1,seed),u),v);}
-const ROCK_STAGE_COLORS=['#857c6b','#a19b8c','#b1ad9d','#bcb9a9','#c9c7b6'].map(hex=>new T.Color(hex));
-const seasonColors=[{grass:'#7b8655',forest:'#566339',pine:'#5c6944',oak:'#738247',sky:'#aab5ac',sun:'#ffe4b7'},{grass:'#8b8d5a',forest:'#626a3c',pine:'#59653e',oak:'#7c8543',sky:'#b2bdb2',sun:'#ffe6b9'},{grass:'#8d8358',forest:'#726c46',pine:'#626b43',oak:'#a78543',sky:'#b3b8ad',sun:'#ffe1ad'},{grass:'#c9cfc4',forest:'#a5b1a2',pine:'#97a895',oak:'#b5b8a1',sky:'#bdc9c9',sun:'#ecf2ef'}];
+const ROCK_STAGE_COLORS=['#958d75','#b3a88d','#c3b69b','#d1c4aa','#ddd3be'].map(hex=>new T.Color(hex));
+// Paleta diurna clara: los prados destacan sobre los bosques, las rocas
+// son cálidas y el cielo deja de teñir la escena de gris en todas las estaciones.
+const seasonColors=[
+ {grass:'#9ac664',forest:'#4f8951',pine:'#4c8955',oak:'#83af55',sky:'#b9dbf0',sun:'#fff4d3'},
+ {grass:'#aec86d',forest:'#668d4a',pine:'#478354',oak:'#98ac54',sky:'#c5e3f3',sun:'#fff0c4'},
+ {grass:'#c3b46f',forest:'#898a4b',pine:'#568058',oak:'#c59e55',sky:'#c9dff0',sun:'#ffebc9'},
+ {grass:'#dbe6dc',forest:'#b2c9ba',pine:'#8cad9a',oak:'#c7d1b8',sky:'#d6e8f2',sun:'#fff5e6'}
+];
 
 export class Renderer{
  constructor(canvas,mini,world){
   this.canvas=canvas;this.mini=mini;this.mc=mini.getContext('2d');this.world=world;this.camera={x:31,y:32};this.zoom=1;this.azimuth=.83;this.elevation=.79;this.hover=null;this.selected=null;this.buildMode=null;this.gatherMode=false;this.width=1;this.height=1;this.lastDay=-1;this.lastSeason=-1;this.lastVisualKey='';this.miniKey='';this.time=0;this.buildingMeshes=new Map();this.people=new Map();this.animalMeshes=[];this.dummy=new T.Object3D();this.raycaster=new T.Raycaster();this.mouse=new T.Vector2();this.quality=DEFAULT_GRAPHICS_QUALITY;
   this.gl=new T.WebGLRenderer({canvas,antialias:false,alpha:false,powerPreference:'high-performance'});this.gl.setPixelRatio(1);this.gl.shadowMap.enabled=false;this.gl.shadowMap.type=T.PCFSoftShadowMap;this.gl.shadowMap.autoUpdate=false;this.gl.outputColorSpace=T.SRGBColorSpace;this.gl.toneMapping=T.NoToneMapping;this.gl.toneMappingExposure=1.02;this.gl.debug.onShaderError=(gl,program,vertex,fragment)=>{console.error('Error de shader:',gl.getProgramInfoLog(program),gl.getShaderInfoLog(vertex),gl.getShaderInfoLog(fragment));throw new Error('No se han podido compilar los efectos gráficos.');};
-  this.scene=new T.Scene();this.scene.background=new T.Color('#aab5ac');this.scene.fog=new T.FogExp2('#aab5ac',.0018);
+  this.scene=new T.Scene();this.scene.background=new T.Color('#b9dbf0');this.scene.fog=new T.FogExp2('#b9dbf0',.0012);
   this.viewCamera=new T.PerspectiveCamera(42,1,.15,1200);
-  this.sun=new T.DirectionalLight('#ffe4b7',2.5);this.sun.castShadow=true;this.sun.shadow.mapSize.set(1024,1024);this.sun.shadow.camera.left=-26;this.sun.shadow.camera.right=26;this.sun.shadow.camera.top=26;this.sun.shadow.camera.bottom=-26;this.sun.shadow.camera.near=.1;this.sun.shadow.camera.far=130;this.sun.shadow.bias=-.00025;this.sun.shadow.normalBias=.035;this.sun.shadow.radius=2;this.scene.add(this.sun,this.sun.target);
-  this.hemi=new T.HemisphereLight('#dce4ed','#696849',1.25);this.scene.add(this.hemi);
+  this.sun=new T.DirectionalLight('#fff4d3',2.65);this.sun.castShadow=true;this.sun.shadow.mapSize.set(1024,1024);this.sun.shadow.camera.left=-26;this.sun.shadow.camera.right=26;this.sun.shadow.camera.top=26;this.sun.shadow.camera.bottom=-26;this.sun.shadow.camera.near=.1;this.sun.shadow.camera.far=130;this.sun.shadow.bias=-.00025;this.sun.shadow.normalBias=.035;this.sun.shadow.radius=2;this.scene.add(this.sun,this.sun.target);
+  this.hemi=new T.HemisphereLight('#f1f9ff','#81966e',1.45);this.scene.add(this.hemi);
   this.materials=makeMaterials();this.detail=installDetailedMaterials(this.materials,()=>{this.gl.shadowMap.needsUpdate=true;});this.post=null;this.sky=makeSky();this.scene.add(this.sky);this.staticGroup=new T.Group();this.scene.add(this.staticGroup);this.buildingsGroup=new T.Group();this.scene.add(this.buildingsGroup);this.villagersGroup=new T.Group();this.scene.add(this.villagersGroup);this.treeInstances=[];this.treeTemplates=new Map();this.sharedChunkGeometries=new Set();this.rockGeometry=null;this.rockScarGeometry=null;this.rockInstances=null;this.chunkVisuals=null;this.waterBedCenter={x:32,y:32};this.lastVisualBuild=-100;this.lastDetailBuild=-100;this.lastVisualTime=0;this.lastPrefetch=0;this.adaptiveHorizon=new AdaptiveHorizon();this.visualHorizon=renderDistanceForZoom(this.zoom,this.adaptiveHorizon.distance);
   this.selectionMat=new T.MeshBasicMaterial({color:'#e6cf8e',transparent:true,opacity:.32,depthWrite:false,side:T.DoubleSide});this.placementMat=this.selectionMat.clone();this.placement=new T.Mesh(new T.PlaneGeometry(1,1),this.placementMat);this.placement.rotation.x=-Math.PI/2;this.placement.renderOrder=10;this.placement.visible=false;this.scene.add(this.placement);this.selection=this.placement.clone();this.selection.material=this.selectionMat;this.scene.add(this.selection);
   this.pickMaterial=new T.MeshBasicMaterial({color:'#ffffff',transparent:true,opacity:0,depthWrite:false,depthTest:false,side:T.DoubleSide});
@@ -99,10 +106,10 @@ export class Renderer{
   const p=this.terrain.geometry.getAttribute('position'),colors=this.terrain.geometry.getAttribute('color');
   const pal=seasonColors[this.world.season],landscape=this.terrain.userData.landscape;
   const grass=new T.Color(pal.grass),forest=new T.Color(pal.forest);
-  const bank=new T.Color(this.world.season===3?'#b6bdb2':'#a39c7c');
-  const rock=new T.Color(this.world.season===3?'#c0c5bc':'#92958a');
-  const dry=new T.Color(this.world.season===3?'#bdc9bc':'#ad9c6a');
-  const summit=new T.Color(this.world.season===3?'#f0f2eb':'#d2d5ca');
+  const bank=new T.Color(this.world.season===3?'#cddbd5':'#c3b48c');
+  const rock=new T.Color(this.world.season===3?'#d2d9d4':'#b9b19c');
+  const dry=new T.Color(this.world.season===3?'#d6e3d6':'#d0bc7d');
+  const summit=new T.Color(this.world.season===3?'#f8faf2':'#e5e8df');
   const color=new T.Color(),seed=this.world.seedNumber;
   for(let i=0;i<p.count;i++){
    const x=p.getX(i),z=p.getZ(i),h=p.getY(i);
@@ -115,10 +122,10 @@ export class Renderer{
    // oscuros. Las montañas pasan a roca y nieve sin usar texturas nuevas.
    const dark=clamp((cover-.37)*2.1,0,1);
    const dryness=landscape?clamp((.48-cover)*2.5,0,1)*clamp((.69-wet)*2.2,0,1):0;
-   color.copy(grass).lerp(forest,dark*.80).multiplyScalar(.93+fine*.18);
+   color.copy(grass).lerp(forest,dark*.78).multiplyScalar(.98+fine*.14);
    if(dryness>0)color.lerp(dry,dryness*.82);
    if(h<.4)color.lerp(bank,clamp((.42-h)*1.9,0,1));
-   if(h>1.8)color.lerp(rock,clamp((h-1.8)/10.5,0,.96));
+   if(h>3.2)color.lerp(rock,clamp((h-3.2)/14,0,.85));
    if(h>ALPINE_START_HEIGHT-.5)color.lerp(summit,clamp((h-ALPINE_START_HEIGHT+.5)/7,0,this.world.season===3?1:.88));
    colors.setXYZ(i,color.r,color.g,color.b);
   }
@@ -601,7 +608,7 @@ export class Renderer{
   // El círculo general sustituye al antiguo anillo tenue y evita reconstruirlo cada fotograma.
   this.selectedRing.visible=false;
  }
- updateSeason(){const s=this.world.season,p=seasonColors[s];this.lastSeason=s;this.scene.background.set(p.sky);this.scene.fog.color.set(p.sky);this.sun.color.set(p.sun);this.sun.intensity=s===3?1.8:2.5;this.water.material.uniforms.uCold.value=s===3?1:0;this.water.material.uniforms.uSky.value.set(p.sky);this.materials.grass.color.set(s===3?'#c3c9b8':s===2?'#9c8c58':'#8a965d');this.materials.roof.color.set(s===3?'#f1f0e7':'#d5cabb');this.sky.material.uniforms.uHorizon.value.set(p.sky);this.sky.material.uniforms.uCold.value=s===3?1:0;this.materials.thatch.color.set(s===3?'#d6d8c8':'#c5b382');if(this.chunkVisuals){for(const chunk of this.chunkVisuals.values())this.scopeVisualChunk(chunk,()=>{this.colorTerrain();if(chunk.detail)this.refreshTrees();});}else{this.colorTerrain();this.refreshTrees();}this.syncBuildings();this.miniKey='';}
+ updateSeason(){const s=this.world.season,p=seasonColors[s];this.lastSeason=s;this.scene.background.set(p.sky);this.scene.fog.color.set(p.sky);this.sun.color.set(p.sun);this.sun.intensity=s===3?2.05:2.65;this.hemi.intensity=s===3?1.35:1.45;this.water.material.uniforms.uCold.value=s===3?1:0;this.water.material.uniforms.uSky.value.set(p.sky);this.materials.grass.color.set(s===3?'#d4e4d0':s===2?'#b6a866':s===1?'#abc66d':'#97c46b');this.materials.roof.color.set(s===3?'#f6f6ed':'#e5d4b9');this.sky.material.uniforms.uHorizon.value.set(p.sky);this.sky.material.uniforms.uCold.value=s===3?1:0;this.materials.thatch.color.set(s===3?'#e3eadb':'#d9c38b');if(this.chunkVisuals){for(const chunk of this.chunkVisuals.values())this.scopeVisualChunk(chunk,()=>{this.colorTerrain();if(chunk.detail)this.refreshTrees();});}else{this.colorTerrain();this.refreshTrees();}this.syncBuildings();this.miniKey='';}
  invalidate(){this.lastDay=-1;this.lastVisualKey='';this.miniKey='';this.selectionStateKey='';}
  setQuality(q){if(!['low','medium','high'].includes(q))q='low';this.quality=q;if(q!=='low'&&!this.post)this.post=createPostprocessing(this.gl,this.width,this.height);this.gl.setPixelRatio(q==='high'?Math.min(devicePixelRatio||1,2):q==='low'?.8:1);this.gl.shadowMap.enabled=q!=='low';const shadowSize=q==='high'?4096:q==='medium'?2048:1024;if(this.sun.shadow.mapSize.x!==shadowSize){this.sun.shadow.mapSize.set(shadowSize,shadowSize);this.sun.shadow.map?.dispose();this.sun.shadow.map=null;}if(this.chunkVisuals){
    for(const chunk of this.chunkVisuals.values())if(chunk.detail){
