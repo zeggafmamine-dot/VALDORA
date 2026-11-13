@@ -59,7 +59,7 @@ export class World{
   const tiles=this.chunks.setRegion(x,y);if(!tiles)return false;
   this.tiles=tiles;this.viewRegion={x,y};
   this.renderTiles=[];const ox=x*SIZE,oy=y*SIZE;
-  for(let ty=oy-24;ty<oy+SIZE+24;ty++)for(let tx=ox-24;tx<ox+SIZE+24;tx++)this.renderTiles.push(this.tile(tx,ty));
+  for(let ty=oy-64;ty<oy+SIZE+64;ty++)for(let tx=ox-64;tx<ox+SIZE+64;tx++)this.renderTiles.push(this.tile(tx,ty));
   return true;
  }
  rememberTile(t){if(this.terrainVersion===3)this.chunks.remember(t);}
