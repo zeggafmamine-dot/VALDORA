@@ -10,7 +10,7 @@ page.on('console',m=>{if(m.type()==='error')errors.push('Consola: '+m.text());})
 await page.route('**/game.mjs',async route=>{
  const response=await route.fetch();
  const source=await response.text();
- await route.fulfill({status:response.status(),contentType:'text/javascript',body:source+'\nwindow.__valdoraSmoke={world,renderer,chooseBuilding,actAt,updateUI};'});
+ await route.fulfill({status:response.status(),contentType:'text/javascript',body:source+'\nwindow.__valdoraSmoke={world,renderer,chooseBuilding,actAt,updateUI,closeSelection};'});
 });
 try{
  await page.goto('http://127.0.0.1:8765',{waitUntil:'domcontentloaded'});
@@ -78,6 +78,52 @@ try{
  assert.equal(mine.stoneBefore-mine.stoneAfter,4);
  assert.equal(mine.scar,true);
  assert.ok(mine.afterScale<mine.beforeScale,'La roca 3D debe encogerse al agotarse');
+ // La prueba anterior invocaba actAt directamente. Ahora hacemos un clic
+ // FÍSICO de Playwright sobre la cantera para reproducir la acción del jugador.
+ const target=await page.evaluate(async()=>{
+  const {world,renderer,closeSelection}=window.__valdoraSmoke;
+  const T=await import('./vendor/three.module.js');
+  const b=world.buildings.find(b=>b.type==='quarry');
+  renderer.focus(b.x+b.w/2,b.y+b.h/2);
+  renderer.syncBuildings();closeSelection();
+  const center=new T.Vector3(b.x+b.w/2,renderer.heightAt(b.x+b.w/2,b.y+b.h/2)+.7,b.y+b.h/2);
+  const projected=center.project(renderer.viewCamera);
+  const rect=renderer.canvas.getBoundingClientRect();
+  const sx=(projected.x+1)*rect.width/2,sy=(1-projected.y)*rect.height/2;
+  for(let dy=-10;dy<=10;dy+=2)for(let dx=-10;dx<=10;dx+=2){
+   const x=sx+dx,y=sy+dy;
+   if(renderer.pickBuilding(x,y)!==b.id)continue;
+   const absoluteX=x+rect.left,absoluteY=y+rect.top;
+   if(document.elementFromPoint(absoluteX,absoluteY)===renderer.canvas)
+    return {x:absoluteX,y:absoluteY,id:b.id};
+  }
+  throw Error('No se puede pulsar la cantera sobre el mapa a la distancia normal de cámara.');
+ });
+ await page.mouse.click(target.x,target.y);
+ await page.waitForTimeout(250);
+ assert.equal(await page.locator('#selection-panel').isVisible(),true,'El clic debe abrir la ficha visible');
+ assert.equal(await page.locator('#quarry-inspector').isVisible(),true,'La reserva también debe mostrarse en el mapa');
+ assert.match(await page.locator('[data-quarry-primary]').innerText(),/unidades/);
+ assert.match(await page.locator('#quarry-inspector').innerText(),/piedras disponibles/);
+ const visual=await page.evaluate(()=>{
+  const {renderer}=window.__valdoraSmoke;
+  const panel=document.querySelector('#selection-panel');
+  const circle=renderer.quarryArea;
+  return {
+   visible:circle.visible,
+   fillVertices:renderer.quarryFill.geometry.getAttribute('position').count,
+   borderVertices:renderer.quarryBorder.geometry.getAttribute('position').count,
+   panelBox:panel.getBoundingClientRect().toJSON(),
+   panelDisplay:getComputedStyle(panel).display,
+   circleColor:renderer.quarryBorder.material.color.getHexString()
+  };
+ });
+ assert.equal(visual.visible,true,'El círculo de influencia debe ser visible al seleccionar');
+ assert.ok(visual.fillVertices>=200,'El círculo debe tener un relleno geométrico real');
+ assert.ok(visual.borderVertices>=400,'El borde del círculo debe ser grueso');
+ assert.notEqual(visual.panelDisplay,'none','La ficha debe ser visible por CSS');
+ assert.ok(visual.panelBox.width>190&&visual.panelBox.height>100);
+
  await page.waitForTimeout(1200);
  await page.keyboard.down('d');await page.waitForTimeout(1500);await page.keyboard.up('d');
  await page.keyboard.down('s');await page.waitForTimeout(1500);await page.keyboard.up('s');
