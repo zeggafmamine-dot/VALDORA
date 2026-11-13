@@ -28,7 +28,7 @@ export class ChunkStore{
  }
  remember(t){
   if(!t)return;
-  this.changes.set(key(t.x,t.y),{tree:!!t.tree,rock:!!t.rock,road:!!t.road,bridge:!!t.bridge,bridgeAxis:t.bridgeAxis,marked:!!t.marked,stoneLeft:stoneRemaining(t)});
+  this.changes.set(key(t.x,t.y),{tree:!!t.tree,rock:!!t.rock,road:!!t.road,bridge:!!t.bridge,bridgeAxis:t.bridgeAxis,marked:!!t.marked,stoneLeft:stoneRemaining(t),stoneScar:!!t.stoneScar});
  }
  override(x,y,state){
   if(!valid(x)||!valid(y))throw Error('Casilla no válida');
@@ -36,7 +36,7 @@ export class ChunkStore{
   const base=old||this.createTile(x,y);
   const stoneLeft=state.stoneLeft===undefined?(state.rock?stoneCapacity(base):0):state.stoneLeft;
   if(!Number.isInteger(stoneLeft)||stoneLeft<0||stoneLeft>MAX_STONE_PER_TILE)throw Error('Piedra no válida');
-  const value={tree:!!state.tree,rock:!!state.rock&&stoneLeft>0,road:!!state.road,bridge:!!state.bridge,marked:!!state.marked,bridgeAxis:['x','y'].includes(state.bridgeAxis)?state.bridgeAxis:undefined,stoneLeft};
+  const value={tree:!!state.tree,rock:!!state.rock&&stoneLeft>0,road:!!state.road,bridge:!!state.bridge,marked:!!state.marked,bridgeAxis:['x','y'].includes(state.bridgeAxis)?state.bridgeAxis:undefined,stoneLeft,stoneScar:!!state.stoneScar};
   this.changes.set(key(x,y),value);
   const cx=Math.floor(x/CHUNK_SIZE),cy=Math.floor(y/CHUNK_SIZE),chunk=this.cache.get(key(cx,cy));
   if(chunk)Object.assign(chunk[(y-cy*CHUNK_SIZE)*CHUNK_SIZE+x-cx*CHUNK_SIZE],value);
@@ -77,12 +77,12 @@ export class ChunkStore{
   // Las consultas de simulación fuera del encuadre no deben hacer crecer la caché.
   while(this.cache.size>CHUNK_LIMIT)this.cache.delete(this.cache.keys().next().value);
  }
- exportChanges(){return [...this.changes].map(([xy,state])=>{const [x,y]=xy.split(',').map(Number);return [x,y,+state.tree,+state.rock,+state.road,+state.bridge,state.bridgeAxis==='x'?1:state.bridgeAxis==='y'?2:0,+state.marked,state.stoneLeft];});}
+ exportChanges(){return [...this.changes].map(([xy,state])=>{const [x,y]=xy.split(',').map(Number);return [x,y,+state.tree,+state.rock,+state.road,+state.bridge,state.bridgeAxis==='x'?1:state.bridgeAxis==='y'?2:0,+state.marked,state.stoneLeft,+state.stoneScar];});}
  importChanges(records){
   if(!Array.isArray(records)||records.length>500000)throw Error('Cambios no válidos');
   for(const row of records){
-   if(!Array.isArray(row)||(row.length!==8&&row.length!==9)||!valid(row[0])||!valid(row[1])||!row.slice(2,8).every(n=>Number.isInteger(n)&&n>=0&&n<=2)||(row.length===9&&(!Number.isInteger(row[8])||row[8]<0||row[8]>MAX_STONE_PER_TILE)))throw Error('Cambios no válidos');
-   this.override(row[0],row[1],{tree:!!row[2],rock:!!row[3],road:!!row[4],bridge:!!row[5],bridgeAxis:row[6]===1?'x':row[6]===2?'y':undefined,marked:!!row[7],stoneLeft:row.length===9?row[8]:undefined});
+   if(!Array.isArray(row)||![8,9,10].includes(row.length)||!valid(row[0])||!valid(row[1])||!row.slice(2,8).every(n=>Number.isInteger(n)&&n>=0&&n<=2)||(row.length>=9&&(!Number.isInteger(row[8])||row[8]<0||row[8]>MAX_STONE_PER_TILE))||(row.length===10&&![0,1].includes(row[9])))throw Error('Cambios no válidos');
+   this.override(row[0],row[1],{tree:!!row[2],rock:!!row[3],road:!!row[4],bridge:!!row[5],bridgeAxis:row[6]===1?'x':row[6]===2?'y':undefined,marked:!!row[7],stoneLeft:row.length>=9?row[8]:undefined,stoneScar:row.length===10?!!row[9]:false});
   }
  }
 }
