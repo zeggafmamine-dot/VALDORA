@@ -6,7 +6,7 @@ import {revealProgress,REVEAL_SECONDS} from '../dist/reveal.mjs';
 
 test('los sectores tienen 64x64 y encajan exactamente en coordenadas negativas',()=>{
  assert.equal(CHUNK_SIZE,64);
- assert.equal(CHUNK_LIMIT,20);
+ assert.equal(CHUNK_LIMIT,12);
  const cache=new ChunkStore((x,y)=>({x,y}));
  assert.equal(cache.getChunk(0,0).length,4096);
  assert.deepEqual(cache.tile(-1,-1),{x:-1,y:-1});
