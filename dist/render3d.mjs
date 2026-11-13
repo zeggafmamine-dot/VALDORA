@@ -1,6 +1,6 @@
 import * as T from './vendor/three.module.js';
 import {SIZE,BUILDINGS,hash} from './sim.mjs';
-import {terrainSample,REGION_SIZE} from './terrain.mjs';
+import {terrainSample,REGION_SIZE,ALPINE_START_HEIGHT} from './terrain.mjs';
 import {stoneVisualScale,stoneStage} from './stone-deposits.mjs';
 import {workArea} from './work-areas.mjs';
 import {desiredChunks,visibilityTarget,approachOpacity,shouldRetire,chunkDistance,MAX_VISUAL_CHUNKS,CAMERA_DISTANCE,DEFAULT_GRAPHICS_QUALITY,renderDistanceForZoom,AdaptiveHorizon,VISUAL_RADIUS} from './stream-window.mjs';
@@ -119,7 +119,7 @@ export class Renderer{
    if(dryness>0)color.lerp(dry,dryness*.82);
    if(h<.4)color.lerp(bank,clamp((.42-h)*1.9,0,1));
    if(h>1.8)color.lerp(rock,clamp((h-1.8)/10.5,0,.96));
-   if(h>13)color.lerp(summit,clamp((h-13)/9,0,this.world.season===3?1:.91));
+   if(h>ALPINE_START_HEIGHT-.5)color.lerp(summit,clamp((h-ALPINE_START_HEIGHT+.5)/7,0,this.world.season===3?1:.88));
    colors.setXYZ(i,color.r,color.g,color.b);
   }
   colors.needsUpdate=true;
