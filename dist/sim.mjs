@@ -1,7 +1,7 @@
 import {planLine} from './paths.mjs';
 import {terrainSample,validCoordinates,REGION_SIZE} from './terrain.mjs';
 import {ChunkStore} from './chunks.mjs';
-import {QUARRY_RADIUS,STONE_PER_WORKER,stoneCapacity,stoneRemaining} from './stone-deposits.mjs';
+import {QUARRY_RADIUS,STONE_PER_WORKER,stoneCapacity,stoneRemaining,quarryBounds,quarryContains} from './stone-deposits.mjs';
 export const SIZE=64;
 export const SEASONS=[{name:'Primavera',short:'Prim.',temperature:14,color:'#a2bf76'},{name:'Verano',short:'Ver.',temperature:24,color:'#e7bd6b'},{name:'Otoño',short:'Oto.',temperature:10,color:'#c98e55'},{name:'Invierno',short:'Inv.',temperature:-5,color:'#b8d0dc'}];
 export const RESOURCES={wood:{name:'Madera',icon:'wood',color:'#c5a584'},stone:{name:'Piedra',icon:'stone',color:'#bcc4ca'},food:{name:'Alimentos',icon:'food',color:'#d9bf76'},firewood:{name:'Leña',icon:'fire',color:'#e6a06f'}};
@@ -110,17 +110,18 @@ export class World{
  changeWorkers(id,amount){const b=this.buildings.find(v=>v.id===id);if(!b||b.progress<1)return false;const cap=BUILDINGS[b.type].maxWorkers;if(amount>0&&(this.idle<=0||b.workers>=cap))return false;if(amount<0&&b.workers<=0)return false;b.workers=Math.max(0,Math.min(cap,b.workers+amount));this.assignJobs();return true;}
  // Identifica el depósito visible más cercano, sin excavar bajo edificios o caminos.
  findQuarryDeposit(b){
-  const cx=b.x+b.w/2,cy=b.y+b.h/2,r=QUARRY_RADIUS;
-  if(b.targetStone&&Number.isSafeInteger(b.targetStone.x)&&Number.isSafeInteger(b.targetStone.y)){
+  const cx=b.x+b.w/2,cy=b.y+b.h/2;
+  const {minX,maxX,minY,maxY}=quarryBounds(b);
+  if(b.targetStone&&Number.isSafeInteger(b.targetStone.x)&&Number.isSafeInteger(b.targetStone.y)&&
+    quarryContains(b,b.targetStone.x,b.targetStone.y)){
    const t=this.tile(b.targetStone.x,b.targetStone.y);
-   if(t&&stoneRemaining(t)>0&&t.rock&&!t.building&&!t.road&&!t.bridge&&
-    Math.hypot(t.x+.5-cx,t.y+.5-cy)<=r)return t;
+   if(t&&stoneRemaining(t)>0&&t.rock&&!t.building&&!t.road&&!t.bridge)return t;
   }
   let best=null,smallest=Infinity;
-  for(let y=Math.floor(cy-r);y<=Math.ceil(cy+r);y++)for(let x=Math.floor(cx-r);x<=Math.ceil(cx+r);x++){
+  for(let y=minY;y<=maxY;y++)for(let x=minX;x<=maxX;x++){
    if(x>=b.x&&x<b.x+b.w&&y>=b.y&&y<b.y+b.h)continue;
    const distance=(x+.5-cx)**2+(y+.5-cy)**2;
-   if(distance>r*r||distance>=smallest)continue;
+   if(distance>=smallest)continue;
    const t=this.tile(x,y);
    if(t&&t.rock&&stoneRemaining(t)>0&&!t.building&&!t.road&&!t.bridge){best=t;smallest=distance;}
   }
@@ -148,15 +149,15 @@ export class World{
  }
  // Reserva visible del radio de trabajo, útil en el panel del edificio.
  stoneAround(b){
-  const cx=b.x+b.w/2,cy=b.y+b.h/2,r=QUARRY_RADIUS;
+  const {minX,maxX,minY,maxY}=quarryBounds(b);
   let total=0;
-  for(let y=Math.floor(cy-r);y<=Math.ceil(cy+r);y++)for(let x=Math.floor(cx-r);x<=Math.ceil(cx+r);x++){
-   if((x+.5-cx)**2+(y+.5-cy)**2>r*r)continue;
+  for(let y=minY;y<=maxY;y++)for(let x=minX;x<=maxX;x++){
    const t=this.tile(x,y);
    if(t&&t.rock&&!t.building&&!t.road&&!t.bridge)total+=stoneRemaining(t);
   }
   return total;
  }
+
  forestAt(b,radius=7){let trees=0;for(let y=b.y-radius;y<b.y+radius;y++)for(let x=b.x-radius;x<b.x+radius;x++)if(this.tile(x,y)?.tree)trees++;return Math.min(1,trees/18);}
  tick(){if(this.gameOver)return;this.totalDays++;this.day++;if(this.day>30){this.day=1;this.season++;if(this.season>3){this.season=0;this.year++;}this.newSeason();}
   const before={...this.resources};
