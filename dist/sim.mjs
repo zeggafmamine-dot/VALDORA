@@ -58,9 +58,9 @@ export class World{
   if(!force&&x===this.viewRegion.x&&y===this.viewRegion.y)return false;
   const tiles=this.chunks.setRegion(x,y);if(!tiles)return false;
   this.tiles=tiles;this.viewRegion={x,y};
-  this.renderTiles=[];const ox=x*SIZE,oy=y*SIZE;
-  for(let ty=oy-64;ty<oy+SIZE+64;ty++)for(let tx=ox-64;tx<ox+SIZE+64;tx++)this.renderTiles.push(this.tile(tx,ty));
-  return true;
+  // La representación 3D solicita sus sectores por separado; evita construir
+  // de golpe una cuadrícula de 192×192 casillas al cruzar cualquier límite.
+  this.renderTiles=tiles;return true;
  }
  rememberTile(t){if(this.terrainVersion===3)this.chunks.remember(t);}
  get loadedChunks(){return this.terrainVersion===3?this.chunks.chunkCount:1;}
