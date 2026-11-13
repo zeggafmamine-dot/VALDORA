@@ -173,6 +173,35 @@ try{
  }
  assert.match(workers.find(item=>item.type==='woodcutter').note,/no tala/);
 
+ // Regresión del coste: en calidad Ligera no se construyen instancias
+ // de hierba invisibles ni se vuelve a consultar un sector sin cambios.
+ const performance=await page.evaluate(()=>{
+  const {world,renderer}=window.__valdoraSmoke;
+  const detailed=[...renderer.chunkVisuals.values()].find(c=>c.detail);
+  if(!detailed)throw Error('Falta algún sector con vegetación para el test de rendimiento.');
+  renderer.refreshVisualChunk(detailed);
+  const active=renderer.chunkVisuals.get(detailed.key);
+  if(!active?.detail)throw Error('El sector detallado no se mantuvo activo.');
+  const original=world.chunks.getChunk;
+  let reads=0;
+  world.chunks.getChunk=function(...args){reads++;return original.apply(this,args);};
+  try{renderer.refreshVisualChunk(active);}
+  finally{world.chunks.getChunk=original;}
+  const bed=renderer.water.material.uniforms.uBed.value;
+  return {
+   quality:renderer.quality,grassCreated:!!active.grassInst,
+   terrainSegments:active.terrain.geometry.parameters.widthSegments,
+   waterSize:bed.image.width,waterSpan:renderer.water.geometry.parameters.width,
+   unnecessaryChunkReads:reads
+  };
+ });
+ assert.equal(performance.quality,'low');
+ assert.equal(performance.grassCreated,false,'No generar hierba invisible en calidad Ligera');
+ assert.equal(performance.terrainSegments,20,'El terreno distante debe emplear mallas más ligeras');
+ assert.equal(performance.waterSize,80,'Reducir cuatro veces los muestreos del agua');
+ assert.equal(performance.waterSpan,768);
+ assert.equal(performance.unnecessaryChunkReads,0,'No regenerar sectores intactos entre días');
+
  await page.waitForTimeout(1200);
  await page.keyboard.down('d');await page.waitForTimeout(1500);await page.keyboard.up('d');
  await page.keyboard.down('s');await page.waitForTimeout(1500);await page.keyboard.up('s');
