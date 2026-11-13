@@ -85,6 +85,16 @@ export class Renderer{
    }[t.biome]:null;
    const color=biomeColor||pal.grass[Math.min(5,Math.floor(r*6))];
    this.diamond(x,y,1.015,1.015,0,color);
+   if(t.biome==='alpine'){
+    // Trazos de grietas y nieve, diferentes de la textura vegetal o
+    // de los depósitos extraíbles de roca de las laderas más bajas.
+    const frost=hash(x,y,this.world.seedNumber+492);
+    if(frost>.26){
+     const p=this.iso(x+.2,y+.52);
+     this.line([{x:p.x-3,y:p.y+1},{x:p.x+4+frost*3,y:p.y-3}],
+      frost>.65?'#f4f5ef':'#81969f',1);
+    }
+   }
    if(t.stoneScar&&!t.building&&!t.road){this.diamond(x+.13,y+.13,.74,.74,.15,this.world.season===3?'#aaa99f':'#847e6d','#a39b8566');}
   if(t.type==='grass'&&r>.77&&!t.building&&!t.road){const p=this.iso(x+.4,y+.6);this.line([{x:p.x-3,y:p.y},{x:p.x-4,y:p.y-3}],pal.soil,.7);this.line([{x:p.x,y:p.y},{x:p.x+1,y:p.y-4}],pal.soil,.7);if(r>.94&&this.world.season!==3){this.ellipse(p.x+9,p.y-2,1.3,.9,'#d9d5a0');this.ellipse(p.x+5,p.y,1,.8,'#d9d5a0');}}
   if(t.road){this.diamond(x+.05,y+.05,.9,.9,1,this.world.season===3?'#b2bab0':'#b8af8c','#c1b99955');const p=this.iso(x+.5,y+.5);this.line([{x:p.x-8,y:p.y},{x:p.x+9,y:p.y-1}],'#8e937048',.6);}
@@ -96,7 +106,7 @@ export class Renderer{
   if(t.marked){c.strokeStyle='#ebd193';c.lineWidth=1.6;c.beginPath();c.moveTo(p.x-3,p.y-15);c.lineTo(p.x+3,p.y-9);c.moveTo(p.x+3,p.y-15);c.lineTo(p.x-3,p.y-9);c.stroke();}
  }
  drawRock(t){const p=this.iso(t.x+.5,t.y+.5),r=t.variant,scale=t.stoneLeft===undefined?1:stoneVisualScale(t),size=(8+r*8)*scale;if(scale<=0)return;this.ellipse(p.x+4,p.y+2,size,4,'#314a3228');this.poly([{x:p.x-size,y:p.y},{x:p.x-size*.6,y:p.y-size*.65},{x:p.x+size*.15,y:p.y-size},{x:p.x+size*.8,y:p.y-size*.5},{x:p.x+size,y:p.y+1},{x:p.x,y:p.y+5}],this.world.season===3?'#b6c1b8':['#847d71','#968f81','#a19e8d','#a9ad9c','#9a9f8c'][stoneStage(t)||4]);this.poly([{x:p.x-size*.6,y:p.y-size*.65},{x:p.x+size*.15,y:p.y-size},{x:p.x+size*.8,y:p.y-size*.5},{x:p.x,y:p.y-1}],this.world.season===3?'#d3d8cb':'#b7b8a1');if(t.marked)this.ellipse(p.x,p.y-4,2,2,'#e8ce91');}
- drawHill(t,pal){if(t.variant<.3)return;const p=this.iso(t.x+.5,t.y+.5),h=20+t.height+t.variant*28,w=23+t.variant*8;this.poly([{x:p.x-w,y:p.y},{x:p.x-5,y:p.y-h},{x:p.x+w,y:p.y+1},{x:p.x+3,y:p.y+10}],this.world.season===3?'#b8c3bb':'#879581');this.poly([{x:p.x-5,y:p.y-h},{x:p.x+w,y:p.y+1},{x:p.x+3,y:p.y+10}],this.world.season===3?'#9fafaa':'#738576');this.poly([{x:p.x-5,y:p.y-h},{x:p.x-14,y:p.y-h*.62},{x:p.x-7,y:p.y-h*.68},{x:p.x,y:p.y-h*.53},{x:p.x+5,y:p.y-h*.57}],this.world.season===3?'#e0e3d7':'#b4bbaa');}
+ drawHill(t,pal){if(t.variant<.3)return;const alpine=t.biome==='alpine';const p=this.iso(t.x+.5,t.y+.5),h=20+t.height+t.variant*28,w=23+t.variant*8;this.poly([{x:p.x-w,y:p.y},{x:p.x-5,y:p.y-h},{x:p.x+w,y:p.y+1},{x:p.x+3,y:p.y+10}],alpine?'#aebfc5':this.world.season===3?'#b8c3bb':'#879581');this.poly([{x:p.x-5,y:p.y-h},{x:p.x+w,y:p.y+1},{x:p.x+3,y:p.y+10}],alpine?'#8498a4':this.world.season===3?'#9fafaa':'#738576');this.poly([{x:p.x-5,y:p.y-h},{x:p.x-14,y:p.y-h*.62},{x:p.x-7,y:p.y-h*.68},{x:p.x,y:p.y-h*.53},{x:p.x+5,y:p.y-h*.57}],alpine?'#eaf2ef':this.world.season===3?'#e0e3d7':'#b4bbaa');}
  drawGround(b){const x=b.x,y=b.y;
   if(b.type==='farm'){this.diamond(x+.06,y+.06,b.w-.12,b.h-.12,1,this.world.season===3?'#adb8a5':'#8c7e56','#a6a179');for(let row=.28;row<b.w;row+=.3)this.line([this.iso(x+row,y+.16,2),this.iso(x+row,y+b.h-.16,2)],this.world.season===3?'#8e9d89':'#706c48',1.7);}
   else if(b.type==='pasture'){this.diamond(x+.04,y+.04,b.w-.08,b.h-.08,1,this.world.season===3?'#bfcbbc':'#a6ad7a');}
