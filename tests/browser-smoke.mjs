@@ -25,6 +25,34 @@ try{
  assert.equal(await page.locator('body').getAttribute('data-graphics-quality'),'low');
  // Comprobación de arranque real; evitamos recargar en SwiftShader, que puede bloquear la navegación en CI.
  await page.locator('#menu-resume').click();
+ // El cambio visual debe afectar realmente a WebGL, no solo al CSS del menú:
+ // cielos azules, vegetación viva y una iluminación diurna más luminosa.
+ const daylight=await page.evaluate(async()=>{
+  const {renderer}=window.__valdoraSmoke;
+  const T=await import('./vendor/three.module.js');
+  const hsl=color=>{const data={};color.getHSL(data);return data;};
+  const sky=hsl(renderer.scene.background),grass=hsl(renderer.materials.grass.color);
+  const ground=[...renderer.chunkVisuals.values()].find(c=>c.terrain)?.terrain;
+  return {
+   sky,grass,hemi:renderer.hemi.intensity,sun:renderer.sun.intensity,
+   fog:renderer.scene.fog.density,
+   waterLow:renderer.water.material.fragmentShader.includes('vec3(.12,.28,.27)'),
+   skyBlue:renderer.sky.material.fragmentShader.includes('vec3(.44,.66,.83)'),
+   groundColored:!!ground?.geometry.getAttribute('color'),
+   vertexCount:ground?.geometry.getAttribute('color')?.count||0
+  };
+ });
+ assert.ok(daylight.sky.h>.5&&daylight.sky.h<.65,'El cielo debe ser azul y no gris verdoso');
+ assert.ok(daylight.sky.s>.45,'El cielo debe tener saturación visible');
+ assert.ok(daylight.sky.l>.55,'El cielo debe ser luminoso');
+ assert.ok(daylight.grass.s>.3,'La hierba necesita verdes vivos, no un tono gris');
+ assert.ok(daylight.hemi>=1.4&&daylight.sun>=2.5,'La iluminación diurna debe ser clara');
+ assert.ok(daylight.fog<.0015,'La niebla no debe apagar todo el paisaje cercano');
+ assert.equal(daylight.waterLow,true,'El río ligero debe verse turquesa');
+ assert.equal(daylight.skyBlue,true,'El fondo del cielo debe utilizar el nuevo azul');
+ assert.equal(daylight.groundColored,true,'Conservar los colores de bioma por vértice');
+ assert.ok(daylight.vertexCount>200,'Las praderas deben conservar su geometría existente');
+
  // La barra izquierda debe plegarse por completo, dar anchura real al
  // canvas y volver a abrirse con el MISMO botón, también en móvil.
  const panel=page.locator('#sidebar'),toggle=page.locator('#sidebar-toggle');
