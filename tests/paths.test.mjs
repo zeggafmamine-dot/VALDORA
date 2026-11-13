@@ -35,6 +35,6 @@ test('a whole bridge spans procedural water, includes approaches and survives sa
 
 test('roads do not create bridges implicitly and invalid drags are rejected',()=>{
  const w=new World(),water=w.tiles.find(t=>t.y===32&&t.type==='water');assert.equal(w.previewLine('road',{x:water.x-2,y:32},{x:water.x+3,y:32}).ok,false);
- assert.equal(w.previewLine('bridge',{x:25,y:38},{x:36,y:38}).ok,false);assert.equal(w.previewLine('road',{x:-1,y:0},{x:3,y:0}).ok,false);
+ assert.equal(w.previewLine('bridge',{x:25,y:38},{x:36,y:38}).ok,false);assert.equal(w.previewLine('road',{x:NaN,y:0},{x:3,y:0}).ok,false);
  assert.deepEqual(traceLine({x:1,y:1},{x:2.2,y:3}),[]);
 });
