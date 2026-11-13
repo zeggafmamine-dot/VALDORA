@@ -238,5 +238,24 @@ export class Renderer{
   c.fillStyle='#f3ddaa';c.beginPath();c.arc((this.camera.x-rx)*2.5,(this.camera.y-ry)*2.5,2,0,7);c.fill();
  }
  disposeGroup(group,materials=false){group.traverse(o=>{if(o.geometry)o.geometry.dispose();if(materials&&o.material){if(Array.isArray(o.material))o.material.forEach(m=>m.dispose());else o.material.dispose();}});}
- setWorld(w){this.finishRegionReveal();for(const o of [...this.staticGroup.children]){this.disposeGroup(o);this.staticGroup.remove(o);}for(const o of [...this.buildingsGroup.children]){this.disposeGroup(o);this.buildingsGroup.remove(o);}for(const o of [...this.villagersGroup.children]){this.disposeGroup(o);this.villagersGroup.remove(o);}for(const o of this.animalMeshes){this.scene.remove(o);this.disposeGroup(o);}this.animalMeshes=[];this.buildingMeshes.clear();this.people.clear();this.treeInstances=[];this.scene.remove(this.terrain);this.terrain.geometry.dispose();this.world=w;this.linePreview=null;this.river.refreshBed(this.heightAt.bind(this),{x:w.terrainVersion===3?w.viewRegion.x*SIZE+32:32,y:w.terrainVersion===3?w.viewRegion.y*SIZE+32:32});this.selected=null;this.buildMode=null;this.gatherMode=false;this.lastDay=-1;this.lastSeason=-1;this.lastVisualKey='';this.makeTerrain();this.makeVegetation();this.makeRocks();this.makeRoads();this.makeAnimals();this.syncBuildings();this.updateSeason();if(w.cameraPosition)this.focus(w.cameraPosition.x,w.cameraPosition.y);else this.center();this.invalidate();}
+ setWorld(w){
+  this.clearVisualChunks();
+  for(const o of [...this.staticGroup.children]){this.disposeGroup(o);this.staticGroup.remove(o);}
+  for(const o of [...this.buildingsGroup.children]){this.disposeGroup(o);this.buildingsGroup.remove(o);}
+  for(const o of [...this.villagersGroup.children]){this.disposeGroup(o);this.villagersGroup.remove(o);}
+  for(const o of this.animalMeshes){this.scene.remove(o);this.disposeGroup(o);}
+  this.animalMeshes=[];this.buildingMeshes.clear();this.people.clear();this.treeInstances=[];
+  if(this.terrain){this.scene.remove(this.terrain);this.terrain.geometry.dispose();this.terrain=null;}
+  this.world=w;this.chunkVisuals=w.terrainVersion===3?new Map():null;
+  this.linePreview=null;this.selected=null;this.buildMode=null;this.gatherMode=false;
+  this.lastDay=-1;this.lastSeason=-1;this.lastVisualKey='';this.lastVisualTime=0;this.lastVisualBuild=-100;
+  this.river.refreshBed(this.heightAt.bind(this),{x:w.terrainVersion===3?w.viewRegion.x*SIZE+32:32,y:w.terrainVersion===3?w.viewRegion.y*SIZE+32:32});
+  if(this.chunkVisuals)this.makeVisualChunk(w.viewRegion.x,w.viewRegion.y,1);
+  else{this.makeTerrain();this.makeVegetation();this.makeRocks();this.makeRoads();}
+  this.makeAnimals();this.syncBuildings();this.updateSeason();
+  if(w.cameraPosition)this.focus(w.cameraPosition.x,w.cameraPosition.y);
+  else this.center();
+  this.invalidate();
+ }
+
 }
