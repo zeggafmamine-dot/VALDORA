@@ -7,7 +7,7 @@ export class Renderer{
  setWorld(w){this.world=w;this.selected=null;this.buildMode=null;this.gatherMode=false;this.center();if(w.cameraPosition){const p=this.iso(w.cameraPosition.x,w.cameraPosition.y);this.camera={x:p.x,y:p.y};}this.invalidate();}
  invalidate(){this.miniKey='';}
  resize(){let r=this.canvas.getBoundingClientRect();this.width=r.width;this.height=r.height;this.dpr=Math.min(window.devicePixelRatio||1,1.7);this.canvas.width=Math.round(r.width*this.dpr);this.canvas.height=Math.round(r.height*this.dpr);}
- center(){const p=this.iso(31,32);this.camera={x:p.x+50,y:p.y-20};this.zoom=1;}
+ center(){const p=this.iso(31,32);this.camera={x:p.x+50,y:p.y-20};this.zoom=1/3;}
  iso(x,y,z=0){return {x:(x-y)*TW/2,y:(x+y)*TH/2-z};}
  project(x,y,z=0){const p=this.iso(x,y,z);return {x:(p.x-this.camera.x)*this.zoom+this.width/2,y:(p.y-this.camera.y)*this.zoom+this.height/2};}
  unproject(sx,sy){const a=(sx-this.width/2)/this.zoom+this.camera.x,b=(sy-this.height/2)/this.zoom+this.camera.y;return {x:(a/(TW/2)+b/(TH/2))/2,y:(b/(TH/2)-a/(TW/2))/2};}
@@ -18,7 +18,7 @@ export class Renderer{
   const sorted=this.world.buildings.slice().sort((a,b)=>(b.x+b.y+b.w+b.h)-(a.x+a.y+a.w+a.h));
   for(const b of sorted){if(['farm','pasture','quarry'].includes(b.type)||b.progress<1)continue;const h=b.type==='hall'?48:b.type==='well'?36:40;const poly=[this.iso(b.x+b.w/2,b.y,h),this.iso(b.x+b.w,b.y,22),this.iso(b.x+b.w,b.y+b.h),this.iso(b.x,b.y+b.h),this.iso(b.x,b.y,22)];if(inside(poly))return b.id;}return null;
  }
- setZoom(z,sx=this.width/2,sy=this.height/2){const before=this.unproject(sx,sy);this.zoom=Math.max(.45,Math.min(2.2,z));const after=this.unproject(sx,sy);const delta=this.iso(before.x-after.x,before.y-after.y);this.camera.x+=delta.x;this.camera.y+=delta.y;}
+ setZoom(z,sx=this.width/2,sy=this.height/2){const before=this.unproject(sx,sy);this.zoom=Math.max(.18,Math.min(2.2,z));const after=this.unproject(sx,sy);const delta=this.iso(before.x-after.x,before.y-after.y);this.camera.x+=delta.x;this.camera.y+=delta.y;}
  pan(dx,dy){this.camera.x-=dx/this.zoom;this.camera.y-=dy/this.zoom;this.clampCamera();}
  clampCamera(){if(this.world.terrainVersion===3){this.camera.x=Math.max(-1e9,Math.min(1e9,this.camera.x));this.camera.y=Math.max(-1e9,Math.min(1e9,this.camera.y));return;}this.camera.x=Math.max(-SIZE*TW*.38,Math.min(SIZE*TW*.38,this.camera.x));this.camera.y=Math.max(200,Math.min(SIZE*TH-200,this.camera.y));}
  poly(points,color,stroke){const c=this.ctx;c.beginPath();c.moveTo(points[0].x,points[0].y);for(let i=1;i<points.length;i++)c.lineTo(points[i].x,points[i].y);c.closePath();c.fillStyle=color;c.fill();if(stroke){c.strokeStyle=stroke;c.lineWidth=.6;c.stroke();}}
