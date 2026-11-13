@@ -6,7 +6,7 @@ import {revealProgress,REVEAL_SECONDS} from '../dist/reveal.mjs';
 
 test('los sectores tienen 64x64 y encajan exactamente en coordenadas negativas',()=>{
  assert.equal(CHUNK_SIZE,64);
- assert.equal(CHUNK_LIMIT,36);
+ assert.equal(CHUNK_LIMIT,24);
  const cache=new ChunkStore((x,y)=>({x,y}));
  assert.equal(cache.getChunk(0,0).length,4096);
  assert.deepEqual(cache.tile(-1,-1),{x:-1,y:-1});
@@ -22,7 +22,7 @@ test('prefetch prepara las zonas limítrofes de forma gradual y respeta el tope 
  assert.equal(cache.prefetchNext(1),1);
  assert.equal(cache.chunkCount,before+1);
  for(let i=0;i<50;i++)cache.prefetchNext(1);
- assert.equal(cache.chunkCount,25);
+ assert.equal(cache.chunkCount,9);
  cache.setRegion(3,-2);
  for(let i=0;i<60;i++)cache.prefetchNext(1);
  assert.ok(cache.chunkCount<=CHUNK_LIMIT);
