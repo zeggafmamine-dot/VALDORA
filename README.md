@@ -9,6 +9,7 @@ Juego original de construcción y supervivencia inspirado en los city builders d
 Funda una aldea con ocho habitantes. Construye un campo y una cabaña recolectora para alimentar a los colonos. Añade un puesto forestal y un leñador antes del invierno. Las casas permiten recibir nuevos habitantes al empezar cada estación. Completa los cuatro objetivos y continúa expandiendo la aldea.
 
 - Clic en un edificio del panel y después en el mapa: construir.
+- Botón junto al logotipo **VALDORA**: plegar o desplegar el menú izquierdo. Al plegarlo, el mapa se amplía; la preferencia se recuerda en este navegador. En móvil, el botón y «Construir» abren/cierra el mismo menú flotante.
 - Caminos: selecciona Camino de piedra, arrastra entre dos extremos y suelta. La vista previa muestra todo el recorrido y su coste; Esc cancela sin gastar.
 - Puentes: selecciona Puente de madera y arrastra de tierra a tierra sobre el río. El eje se alinea automáticamente.
 - Clic en un edificio existente: ver su estado y ajustar trabajadores.
