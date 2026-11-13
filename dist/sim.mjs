@@ -28,7 +28,7 @@ export class World{
  constructor(seed='VALDORA-2048',restored=null,coordinates={x:0,y:0}){
   this.terrainVersion=restored?(!restored.terrainVersion||restored.terrainVersion===1?1:3):3;this.coordinates=this.terrainVersion===3?(restored?restored.coordinates:coordinates):{x:0,y:0};
   if(this.terrainVersion===3&&!validCoordinates(this.coordinates))throw Error('Coordenadas no válidas');
-  this.seed=String(seed);this.seedNumber=seedHash(seed);this.day=1;this.year=1;this.season=0;this.resources={wood:160,stone:90,food:220,firewood:75};this.health=100;this.happiness=85;this.speed=1;this.lastSpeed=1;this.nextId=1;this.buildings=[];this.citizens=[];this.events=[];this.gatherQueue=[];this.milestones=[];this.history=[];this.starveDays=0;this.coldDays=0;this.gameOver=false;this.won=false;this.totalDays=0;this.tiles=[];this.viewRegion={x:0,y:0};this.buildingCells=new Map();this.production={wood:0,stone:0,food:0,firewood:0};this.generate();
+  this.seed=String(seed);this.seedNumber=seedHash(seed);this.day=1;this.year=1;this.season=0;this.resources={wood:160,stone:90,food:220,firewood:75};this.health=100;this.happiness=85;this.speed=1;this.lastSpeed=1;this.nextId=1;this.buildings=[];this.citizens=[];this.events=[];this.gatherQueue=[];this.milestones=[];this.history=[];this.starveDays=0;this.coldDays=0;this.gameOver=false;this.won=false;this.totalDays=0;this.tiles=[];this.renderTiles=[];this.viewRegion={x:0,y:0};this.buildingCells=new Map();this.production={wood:0,stone:0,food:0,firewood:0};this.generate();
   if(restored){this.restore(restored);return;}
   this.addInitial('hall',29,29);this.addInitial('warehouse',32,29);this.addInitial('house',28,34);this.addInitial('house',32,34);
   for(let x=26;x<=36;x++){const t=this.tile(x,33);t.road=true;this.rememberTile(t);}
@@ -57,7 +57,10 @@ export class World{
   if(this.terrainVersion!==3)return false;
   if(!force&&x===this.viewRegion.x&&y===this.viewRegion.y)return false;
   const tiles=this.chunks.setRegion(x,y);if(!tiles)return false;
-  this.tiles=tiles;this.viewRegion={x,y};return true;
+  this.tiles=tiles;this.viewRegion={x,y};
+  this.renderTiles=[];const ox=x*SIZE,oy=y*SIZE;
+  for(let ty=oy-24;ty<oy+SIZE+24;ty++)for(let tx=ox-24;tx<ox+SIZE+24;tx++)this.renderTiles.push(this.tile(tx,ty));
+  return true;
  }
  rememberTile(t){if(this.terrainVersion===3)this.chunks.remember(t);}
  get loadedChunks(){return this.terrainVersion===3?this.chunks.chunkCount:1;}
