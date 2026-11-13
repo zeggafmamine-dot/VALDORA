@@ -11,6 +11,7 @@ const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 const lerp=(a,b,t)=>a+(b-a)*t;
 const smooth=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);};
 function noise(x,z,seed){const a=Math.floor(x),b=Math.floor(z),u=smooth(0,1,x-a),v=smooth(0,1,z-b);return lerp(lerp(hash(a,b,seed),hash(a+1,b,seed),u),lerp(hash(a,b+1,seed),hash(a+1,b+1,seed),u),v);}
+const ROCK_STAGE_COLORS=['#857c6b','#a19b8c','#b1ad9d','#bcb9a9','#c9c7b6'].map(hex=>new T.Color(hex));
 const seasonColors=[{grass:'#7b8655',forest:'#566339',pine:'#5c6944',oak:'#738247',sky:'#aab5ac',sun:'#ffe4b7'},{grass:'#8b8d5a',forest:'#626a3c',pine:'#59653e',oak:'#7c8543',sky:'#b2bdb2',sun:'#ffe6b9'},{grass:'#8d8358',forest:'#726c46',pine:'#626b43',oak:'#a78543',sky:'#b3b8ad',sun:'#ffe1ad'},{grass:'#c9cfc4',forest:'#a5b1a2',pine:'#97a895',oak:'#b5b8a1',sky:'#bdc9c9',sun:'#ecf2ef'}];
 
 export class Renderer{
@@ -21,7 +22,7 @@ export class Renderer{
   this.viewCamera=new T.PerspectiveCamera(42,1,.15,1200);
   this.sun=new T.DirectionalLight('#ffe4b7',2.5);this.sun.castShadow=true;this.sun.shadow.mapSize.set(1024,1024);this.sun.shadow.camera.left=-26;this.sun.shadow.camera.right=26;this.sun.shadow.camera.top=26;this.sun.shadow.camera.bottom=-26;this.sun.shadow.camera.near=.1;this.sun.shadow.camera.far=130;this.sun.shadow.bias=-.00025;this.sun.shadow.normalBias=.035;this.sun.shadow.radius=2;this.scene.add(this.sun,this.sun.target);
   this.hemi=new T.HemisphereLight('#dce4ed','#696849',1.25);this.scene.add(this.hemi);
-  this.materials=makeMaterials();this.detail=installDetailedMaterials(this.materials,()=>{this.gl.shadowMap.needsUpdate=true;});this.post=null;this.sky=makeSky();this.scene.add(this.sky);this.staticGroup=new T.Group();this.scene.add(this.staticGroup);this.buildingsGroup=new T.Group();this.scene.add(this.buildingsGroup);this.villagersGroup=new T.Group();this.scene.add(this.villagersGroup);this.treeInstances=[];this.rockInstances=null;this.chunkVisuals=null;this.waterBedCenter={x:32,y:32};this.lastVisualBuild=-100;this.lastDetailBuild=-100;this.lastVisualTime=0;this.lastPrefetch=0;this.adaptiveHorizon=new AdaptiveHorizon();this.visualHorizon=renderDistanceForZoom(this.zoom,this.adaptiveHorizon.distance);
+  this.materials=makeMaterials();this.detail=installDetailedMaterials(this.materials,()=>{this.gl.shadowMap.needsUpdate=true;});this.post=null;this.sky=makeSky();this.scene.add(this.sky);this.staticGroup=new T.Group();this.scene.add(this.staticGroup);this.buildingsGroup=new T.Group();this.scene.add(this.buildingsGroup);this.villagersGroup=new T.Group();this.scene.add(this.villagersGroup);this.treeInstances=[];this.treeTemplates=new Map();this.sharedChunkGeometries=new Set();this.rockGeometry=null;this.rockScarGeometry=null;this.rockInstances=null;this.chunkVisuals=null;this.waterBedCenter={x:32,y:32};this.lastVisualBuild=-100;this.lastDetailBuild=-100;this.lastVisualTime=0;this.lastPrefetch=0;this.adaptiveHorizon=new AdaptiveHorizon();this.visualHorizon=renderDistanceForZoom(this.zoom,this.adaptiveHorizon.distance);
   this.selectionMat=new T.MeshBasicMaterial({color:'#e6cf8e',transparent:true,opacity:.32,depthWrite:false,side:T.DoubleSide});this.placementMat=this.selectionMat.clone();this.placement=new T.Mesh(new T.PlaneGeometry(1,1),this.placementMat);this.placement.rotation.x=-Math.PI/2;this.placement.renderOrder=10;this.placement.visible=false;this.scene.add(this.placement);this.selection=this.placement.clone();this.selection.material=this.selectionMat;this.scene.add(this.selection);
   this.pickMaterial=new T.MeshBasicMaterial({color:'#ffffff',transparent:true,opacity:0,depthWrite:false,depthTest:false,side:T.DoubleSide});
   this.ghost=null;this.ghostType=null;this.selectedRing=new T.LineLoop(new T.BufferGeometry(),new T.LineBasicMaterial({color:'#e9d5a3',transparent:true,opacity:.8}));this.scene.add(this.selectedRing);
@@ -70,8 +71,41 @@ export class Renderer{
  }
  colorTerrain(){const p=this.terrain.geometry.getAttribute('position'),colors=this.terrain.geometry.getAttribute('color'),pal=seasonColors[this.world.season],grass=new T.Color(pal.grass),forest=new T.Color(pal.forest),bank=new T.Color(this.world.season===3?'#b6bdb2':'#a39c7c'),rock=new T.Color(this.world.season===3?'#c0c5bc':'#92958a'),color=new T.Color();for(let i=0;i<p.count;i++){const x=p.getX(i),z=p.getZ(i),h=p.getY(i),n=noise((x+(this.world.coordinates?.x||0)*(this.world.terrainVersion>=2?REGION_SIZE:0))*.22,(z+(this.world.coordinates?.y||0)*(this.world.terrainVersion===2?REGION_SIZE:0))*.22,this.world.seedNumber),fine=noise((x+(this.world.coordinates?.x||0)*(this.world.terrainVersion===2?REGION_SIZE:0))*.85,(z+(this.world.coordinates?.y||0)*(this.world.terrainVersion===2?REGION_SIZE:0))*.85,this.world.seedNumber+28);color.copy(grass).lerp(forest,n*.65).multiplyScalar(.92+fine*.2);if(h<.4)color.lerp(bank,clamp((.42-h)*1.9,0,1));if(h>2)color.lerp(rock,clamp((h-2)/4,0,.9));colors.setXYZ(i,color.r,color.g,color.b);}colors.needsUpdate=true;}
  makeWater(){this.river=makeRiver(this.gl,this.scene,this.heightAt.bind(this));this.water=this.river.mesh;}
- createTreeMeshes(){for(const inst of this.treeInstances){this.staticGroup.remove(inst);inst.geometry.dispose();}this.treeInstances=[];const all=(this.world.renderTiles||this.world.tiles).filter(t=>t.tree&&this.heightAt(t.x+.5,t.y+.5)>.2);this.knownTrees=new Set((this.world.renderTiles||this.world.tiles).filter(t=>t.tree));const lists=[[],[],[]];for(const t of all)lists[t.variant>.55?0:t.variant>.4?1:2].push(t);this.treeTiles=all;
-  for(let v=0;v<3;v++){const model=treeModel(this.materials,v),tiles=lists[v];if(!tiles.length)continue;for(const source of model.children){const inst=new T.InstancedMesh(source.geometry,source.material,tiles.length);inst.castShadow=true;inst.receiveShadow=true;inst.instanceMatrix.setUsage(T.DynamicDrawUsage);inst.userData={variant:v,tiles,foliage:source.material!==this.materials.bark};this.staticGroup.add(inst);this.treeInstances.push(inst);}}
+ // La construcción procedural de un árbol es costosa. Los 3 modelos se
+ // preparan una sola vez por renderizador y su geometría se comparte entre
+ // todos los sectores instanciados, sin generar ni compilar mallas duplicadas.
+ treeTemplate(variant){
+  let template=this.treeTemplates.get(variant);
+  if(template)return template;
+  template=treeModel(this.materials,variant).children.map(source=>{
+   this.sharedChunkGeometries.add(source.geometry);
+   return {geometry:source.geometry,material:source.material};
+  });
+  this.treeTemplates.set(variant,template);
+  return template;
+ }
+ createTreeMeshes(){
+  for(const inst of this.treeInstances){
+   this.staticGroup.remove(inst);
+   inst.dispose?.(); // Libera los buffers propios sin destruir la geometría compartida.
+  }
+  this.treeInstances=[];
+  const data=this.world.renderTiles||this.world.tiles;
+  const all=data.filter(t=>t.tree&&this.heightAt(t.x+.5,t.y+.5)>.2);
+  this.knownTrees=new Set(data.filter(t=>t.tree));
+  const lists=[[],[],[]];
+  for(const t of all)lists[t.variant>.55?0:t.variant>.4?1:2].push(t);
+  this.treeTiles=all;
+  for(let v=0;v<3;v++){
+   const tiles=lists[v];if(!tiles.length)continue;
+   for(const source of this.treeTemplate(v)){
+    const inst=new T.InstancedMesh(source.geometry,source.material,tiles.length);
+    inst.castShadow=true;inst.receiveShadow=true;
+    inst.instanceMatrix.setUsage(T.DynamicDrawUsage);
+    inst.userData={variant:v,tiles,foliage:source.material!==this.materials.bark};
+    this.staticGroup.add(inst);this.treeInstances.push(inst);
+   }
+  }
  }
  makeVegetation(){
   this.createTreeMeshes();
@@ -135,17 +169,54 @@ export class Renderer{
   }
   this.gl.shadowMap.needsUpdate=true;
  }
- makeRocks(){const tiles=(this.world.renderTiles||this.world.tiles).filter(t=>t.rock||t.stoneScar);const geom=new T.DodecahedronGeometry(1,1),p=geom.getAttribute('position');for(let i=0;i<p.count;i++){const r=hash(Math.round(p.getX(i)*10),Math.round(p.getY(i)*10),75);p.setXYZ(i,p.getX(i)*(.85+r*.3),p.getY(i)*(.7+r*.5),p.getZ(i)*(.85+r*.3));}geom.computeVertexNormals();this.rockTiles=tiles;this.rockInstances=new T.InstancedMesh(geom,this.materials.rock,Math.max(1,tiles.length));this.rockInstances.castShadow=this.rockInstances.receiveShadow=true;this.staticGroup.add(this.rockInstances);
-  const scarGeo=new T.PlaneGeometry(1,1);scarGeo.rotateX(-Math.PI/2);
-  this.rockScarInstances=new T.InstancedMesh(scarGeo,this.materials.dirt,Math.max(1,tiles.length));
+ // Compartir rocas y marcas de extracción también evita volver a subir sus
+ // vértices a la GPU al mover la cámara a través de sectores.
+ rockTemplate(){
+  if(this.rockGeometry)return this.rockGeometry;
+  const geom=new T.DodecahedronGeometry(1,1),p=geom.getAttribute('position');
+  for(let i=0;i<p.count;i++){
+   const r=hash(Math.round(p.getX(i)*10),Math.round(p.getY(i)*10),75);
+   p.setXYZ(i,p.getX(i)*(.85+r*.3),p.getY(i)*(.7+r*.5),p.getZ(i)*(.85+r*.3));
+  }
+  geom.computeVertexNormals();
+  this.rockGeometry=geom;this.sharedChunkGeometries.add(geom);
+  return geom;
+ }
+ makeRocks(){
+  const tiles=(this.world.renderTiles||this.world.tiles).filter(t=>t.rock||t.stoneScar);
+  const geom=this.rockTemplate();
+  this.rockTiles=tiles;
+  this.rockInstances=new T.InstancedMesh(geom,this.materials.rock,Math.max(1,tiles.length));
+  this.rockInstances.castShadow=this.rockInstances.receiveShadow=true;this.staticGroup.add(this.rockInstances);
+  if(!this.rockScarGeometry){
+   this.rockScarGeometry=new T.PlaneGeometry(1,1);
+   this.rockScarGeometry.rotateX(-Math.PI/2);
+   this.sharedChunkGeometries.add(this.rockScarGeometry);
+  }
+  this.rockScarInstances=new T.InstancedMesh(this.rockScarGeometry,this.materials.dirt,Math.max(1,tiles.length));
   this.rockScarInstances.receiveShadow=true;this.staticGroup.add(this.rockScarInstances);
-  if(!tiles.length){this.dummy.scale.setScalar(0);this.dummy.updateMatrix();this.rockInstances.setMatrixAt(0,this.dummy.matrix);this.rockScarInstances.setMatrixAt(0,this.dummy.matrix);}
+  if(!tiles.length){
+   this.dummy.scale.setScalar(0);this.dummy.updateMatrix();
+   this.rockInstances.setMatrixAt(0,this.dummy.matrix);
+   this.rockScarInstances.setMatrixAt(0,this.dummy.matrix);
+  }
   this.refreshRocks();
-  // Smaller stones soften the riverbank without changing gameplay terrain.
-  const pebbles=(this.world.renderTiles||this.world.tiles).filter(t=>t.type==='grass'&&this.heightAt(t.x+.5,t.y+.5)<.43&&t.variant>.5);const rocks=new T.InstancedMesh(geom,this.materials.rock,Math.max(1,pebbles.length));for(let i=0;i<pebbles.length;i++){const t=pebbles[i],r=t.variant;this.dummy.position.set(t.x+.5,this.heightAt(t.x+.5,t.y+.5),t.y+.5);this.dummy.scale.set(.15+r*.12,.08+r*.09,.13+r*.12);this.dummy.rotation.set(r,r*6,r);this.dummy.updateMatrix();rocks.setMatrixAt(i,this.dummy.matrix);}rocks.receiveShadow=true;this.staticGroup.add(rocks);}
+  // La costa conserva sus pequeñas rocas decorativas. Evitamos calcular
+  // alturas de las casillas que jamás podrían contenerlas.
+  const pebbles=(this.world.renderTiles||this.world.tiles).filter(t=>t.type==='grass'&&t.variant>.5&&this.heightAt(t.x+.5,t.y+.5)<.43);
+  if(!pebbles.length)return;
+  const rocks=new T.InstancedMesh(geom,this.materials.rock,pebbles.length);
+  for(let i=0;i<pebbles.length;i++){
+   const t=pebbles[i],r=t.variant;
+   this.dummy.position.set(t.x+.5,this.heightAt(t.x+.5,t.y+.5),t.y+.5);
+   this.dummy.scale.set(.15+r*.12,.08+r*.09,.13+r*.12);
+   this.dummy.rotation.set(r,r*6,r);this.dummy.updateMatrix();
+   rocks.setMatrixAt(i,this.dummy.matrix);
+  }
+  rocks.receiveShadow=true;this.staticGroup.add(rocks);
+ }
  refreshGrass(){if(!this.grassInst)return;let i=0;for(const t of this.grassTiles)for(let j=0;j<4;j++){const x=t.x+hash(j,t.x),z=t.y+hash(j,t.y,4);this.dummy.position.set(x,this.visualGroundHeightAt(x,z),z);this.dummy.rotation.set(0,hash(j,t.x+t.y)*Math.PI*2,0);this.dummy.scale.setScalar(t.building||t.road||t.tree?0:.55+hash(j,4)*.65);this.dummy.updateMatrix();this.grassInst.setMatrixAt(i++,this.dummy.matrix);}this.grassInst.instanceMatrix.needsUpdate=true;}
  refreshRocks(){
-  const colors=['#857c6b','#a19b8c','#b1ad9d','#bcb9a9','#c9c7b6'];
   for(let i=0;i<this.rockTiles.length;i++){
    const t=this.rockTiles[i],r=t.variant,size=(t.type==='hill'?.45:.22)+r*.3;
    const scale=t.rock?stoneVisualScale(t):0,stage=stoneStage(t);
@@ -153,7 +224,7 @@ export class Renderer{
    this.dummy.position.set(x,y,z);this.dummy.rotation.set(r*.4,r*8,r*.2);
    this.dummy.scale.set(size*scale,size*.75*scale,size*1.1*scale);this.dummy.updateMatrix();
    this.rockInstances.setMatrixAt(i,this.dummy.matrix);
-   this.rockInstances.setColorAt(i,new T.Color(colors[stage]));
+   this.rockInstances.setColorAt(i,ROCK_STAGE_COLORS[stage]);
    if(this.rockScarInstances){
     const scarSize=t.stoneScar?(.42+.48*(1-scale)):0;
     this.dummy.position.set(x,y+.035,z);this.dummy.rotation.set(0,r*6,0);
@@ -494,7 +565,7 @@ export class Renderer{
   c.closePath();c.fillStyle='#f3edd911';c.fill();c.strokeStyle='#e8dfb5b0';c.lineWidth=1;c.stroke();
   c.fillStyle='#f3ddaa';c.beginPath();c.arc((this.camera.x-rx)*2.5,(this.camera.y-ry)*2.5,2,0,7);c.fill();
  }
- disposeGroup(group,materials=false){group.traverse(o=>{if(o.geometry)o.geometry.dispose();if(materials&&o.material){if(Array.isArray(o.material))o.material.forEach(m=>m.dispose());else o.material.dispose();}});}
+ disposeGroup(group,materials=false){group.traverse(o=>{if(o.isInstancedMesh)o.dispose?.();if(o.geometry&&!this.sharedChunkGeometries.has(o.geometry))o.geometry.dispose();if(materials&&o.material){if(Array.isArray(o.material))o.material.forEach(m=>m.dispose());else o.material.dispose();}});}
  setWorld(w){
   this.clearVisualChunks();
   for(const o of [...this.staticGroup.children]){this.disposeGroup(o);this.staticGroup.remove(o);}
