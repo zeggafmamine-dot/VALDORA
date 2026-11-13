@@ -189,7 +189,7 @@ try{
   finally{world.chunks.getChunk=original;}
   const bed=renderer.water.material.uniforms.uBed.value;
   return {
-   quality:renderer.quality,grassCreated:!!active.grassInst,
+   quality:renderer.quality,pixelRatio:renderer.gl.getPixelRatio(),grassCreated:!!active.grassInst,
    terrainSegments:active.terrain.geometry.parameters.widthSegments,
    waterSize:bed.image.width,waterSpan:renderer.water.geometry.parameters.width,
    lowWaterShader:renderer.water.material.uniforms.uLow.value,
@@ -197,6 +197,7 @@ try{
   };
  });
  assert.equal(performance.quality,'low');
+ assert.equal(performance.pixelRatio,.8,'La calidad Ligera debe dibujar menos píxeles en la GPU');
  assert.equal(performance.grassCreated,false,'No generar hierba invisible en calidad Ligera');
  assert.equal(performance.terrainSegments,20,'El terreno distante debe emplear mallas más ligeras');
  assert.equal(performance.waterSize,80,'Reducir cuatro veces los muestreos del agua');
