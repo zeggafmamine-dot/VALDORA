@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {desiredChunks,visibilityTarget,approachOpacity,shouldRetire,CHUNK_WIDTH,VISUAL_RADIUS,MAX_VISUAL_CHUNKS,FULL_DETAIL_DISTANCE,FADE_OUT_DISTANCE,CAMERA_DISTANCE,DEFAULT_GRAPHICS_QUALITY} from '../dist/stream-window.mjs';
+import {desiredChunks,visibilityTarget,approachOpacity,shouldRetire,CHUNK_WIDTH,VISUAL_RADIUS,MAX_VISUAL_CHUNKS,FULL_DETAIL_DISTANCE,FADE_OUT_DISTANCE,CAMERA_DISTANCE,DEFAULT_GRAPHICS_QUALITY,renderDistanceForZoom} from '../dist/stream-window.mjs';
 
 test('los sectores de 64x64 se ordenan según la cámara, no por cambios bruscos de región',()=>{
  assert.equal(CHUNK_WIDTH,64);
@@ -9,6 +9,9 @@ test('los sectores de 64x64 se ordenan según la cámara, no por cambios bruscos
  assert.equal(FADE_OUT_DISTANCE,170*3);
  assert.equal(CAMERA_DISTANCE,28*3);
  assert.equal(DEFAULT_GRAPHICS_QUALITY,'low');
+ assert.ok(renderDistanceForZoom(1)<FADE_OUT_DISTANCE,'Evita cargar terreno que no entra en la cámara normal');
+ assert.equal(renderDistanceForZoom(.38),FADE_OUT_DISTANCE,'Al alejar el zoom sigue ampliando el horizonte');
+ assert.ok(renderDistanceForZoom(1)>CAMERA_DISTANCE*3);
  assert.equal(FADE_OUT_DISTANCE-FULL_DETAIL_DISTANCE,74,'La transición mantiene el mismo ancho');
  for(const x of [31.5,63.9,64,64.1,79,128,239]){
   const wanted=desiredChunks(x,80);
