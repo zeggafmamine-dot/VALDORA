@@ -1,6 +1,7 @@
 // Planificador puro para un horizonte móvil alrededor de la cámara.
 // Cada sector se conserva mientras es útil y su presencia cambia con la distancia.
 export const VISUAL_RADIUS=2;
+export const MAX_VISUAL_CHUNKS=36;
 export const RETIRE_RADIUS=3;
 export const FULL_DETAIL_DISTANCE=96;
 export const FADE_OUT_DISTANCE=170;
