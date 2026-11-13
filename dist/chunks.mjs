@@ -1,6 +1,6 @@
 // Cache acotada de sectores. El mundo es determinista; solo se guardan las modificaciones del jugador.
 export const CHUNK_SIZE=16;
-export const CHUNK_LIMIT=64;
+export const CHUNK_LIMIT=80;
 export const VIEW_SIZE=64;
 const key=(x,y)=>x+','+y;
 const valid=n=>Number.isSafeInteger(n)&&Math.abs(n)<Number.MAX_SAFE_INTEGER/4;
