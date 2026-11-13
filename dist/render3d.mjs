@@ -21,7 +21,7 @@ export class Renderer{
   this.viewCamera=new T.PerspectiveCamera(42,1,.15,1200);
   this.sun=new T.DirectionalLight('#ffe4b7',2.5);this.sun.castShadow=true;this.sun.shadow.mapSize.set(1024,1024);this.sun.shadow.camera.left=-26;this.sun.shadow.camera.right=26;this.sun.shadow.camera.top=26;this.sun.shadow.camera.bottom=-26;this.sun.shadow.camera.near=.1;this.sun.shadow.camera.far=130;this.sun.shadow.bias=-.00025;this.sun.shadow.normalBias=.035;this.sun.shadow.radius=2;this.scene.add(this.sun,this.sun.target);
   this.hemi=new T.HemisphereLight('#dce4ed','#696849',1.25);this.scene.add(this.hemi);
-  this.materials=makeMaterials();this.detail=installDetailedMaterials(this.materials,()=>{this.gl.shadowMap.needsUpdate=true;});this.post=null;this.sky=makeSky();this.scene.add(this.sky);this.staticGroup=new T.Group();this.scene.add(this.staticGroup);this.buildingsGroup=new T.Group();this.scene.add(this.buildingsGroup);this.villagersGroup=new T.Group();this.scene.add(this.villagersGroup);this.treeInstances=[];this.rockInstances=null;this.chunkVisuals=null;this.lastVisualBuild=-100;this.lastDetailBuild=-100;this.lastVisualTime=0;this.lastPrefetch=0;this.adaptiveHorizon=new AdaptiveHorizon();this.visualHorizon=renderDistanceForZoom(this.zoom,this.adaptiveHorizon.distance);
+  this.materials=makeMaterials();this.detail=installDetailedMaterials(this.materials,()=>{this.gl.shadowMap.needsUpdate=true;});this.post=null;this.sky=makeSky();this.scene.add(this.sky);this.staticGroup=new T.Group();this.scene.add(this.staticGroup);this.buildingsGroup=new T.Group();this.scene.add(this.buildingsGroup);this.villagersGroup=new T.Group();this.scene.add(this.villagersGroup);this.treeInstances=[];this.rockInstances=null;this.chunkVisuals=null;this.waterBedCenter={x:32,y:32};this.lastVisualBuild=-100;this.lastDetailBuild=-100;this.lastVisualTime=0;this.lastPrefetch=0;this.adaptiveHorizon=new AdaptiveHorizon();this.visualHorizon=renderDistanceForZoom(this.zoom,this.adaptiveHorizon.distance);
   this.selectionMat=new T.MeshBasicMaterial({color:'#e6cf8e',transparent:true,opacity:.32,depthWrite:false,side:T.DoubleSide});this.placementMat=this.selectionMat.clone();this.placement=new T.Mesh(new T.PlaneGeometry(1,1),this.placementMat);this.placement.rotation.x=-Math.PI/2;this.placement.renderOrder=10;this.placement.visible=false;this.scene.add(this.placement);this.selection=this.placement.clone();this.selection.material=this.selectionMat;this.scene.add(this.selection);
   this.pickMaterial=new T.MeshBasicMaterial({color:'#ffffff',transparent:true,opacity:0,depthWrite:false,depthTest:false,side:T.DoubleSide});
   this.ghost=null;this.ghostType=null;this.selectedRing=new T.LineLoop(new T.BufferGeometry(),new T.LineBasicMaterial({color:'#e9d5a3',transparent:true,opacity:.8}));this.scene.add(this.selectedRing);
@@ -49,7 +49,7 @@ export class Renderer{
   if(shore<1.2)h=lerp(-.75,h,smooth(-1,1.2,shore));
   return h;
  }
- makeTerrain(cx=null,cy=null){const chunk=Number.isInteger(cx)&&Number.isInteger(cy),res=chunk?32:224,span=chunk?64:224,ox=chunk?cx*SIZE:this.world.terrainVersion===3?this.world.viewRegion.x*SIZE:0,oz=chunk?cy*SIZE:this.world.terrainVersion===3?this.world.viewRegion.y*SIZE:0;const geo=new T.PlaneGeometry(span,span,res,res);geo.rotateX(-Math.PI/2);const p=geo.getAttribute('position'),colors=new Float32Array(p.count*3);for(let i=0;i<p.count;i++){const x=p.getX(i)+ox+32,z=p.getZ(i)+oz+32;p.setXYZ(i,x,this.heightAt(x,z),z);}geo.setAttribute('color',new T.BufferAttribute(colors,3));geo.computeVertexNormals();this.terrain=new T.Mesh(geo,this.materials.ground);this.terrain.receiveShadow=true;this.terrain.castShadow=false;(chunk?this.staticGroup:this.scene).add(this.terrain);this.colorTerrain();}
+ makeTerrain(cx=null,cy=null){const chunk=Number.isInteger(cx)&&Number.isInteger(cy),res=chunk?20:224,span=chunk?64:224,ox=chunk?cx*SIZE:this.world.terrainVersion===3?this.world.viewRegion.x*SIZE:0,oz=chunk?cy*SIZE:this.world.terrainVersion===3?this.world.viewRegion.y*SIZE:0;const geo=new T.PlaneGeometry(span,span,res,res);geo.rotateX(-Math.PI/2);const p=geo.getAttribute('position'),colors=new Float32Array(p.count*3);for(let i=0;i<p.count;i++){const x=p.getX(i)+ox+32,z=p.getZ(i)+oz+32;p.setXYZ(i,x,this.heightAt(x,z),z);}geo.setAttribute('color',new T.BufferAttribute(colors,3));geo.computeVertexNormals();this.terrain=new T.Mesh(geo,this.materials.ground);this.terrain.receiveShadow=true;this.terrain.castShadow=false;(chunk?this.staticGroup:this.scene).add(this.terrain);this.colorTerrain();}
  colorTerrain(){const p=this.terrain.geometry.getAttribute('position'),colors=this.terrain.geometry.getAttribute('color'),pal=seasonColors[this.world.season],grass=new T.Color(pal.grass),forest=new T.Color(pal.forest),bank=new T.Color(this.world.season===3?'#b6bdb2':'#a39c7c'),rock=new T.Color(this.world.season===3?'#c0c5bc':'#92958a'),color=new T.Color();for(let i=0;i<p.count;i++){const x=p.getX(i),z=p.getZ(i),h=p.getY(i),n=noise((x+(this.world.coordinates?.x||0)*(this.world.terrainVersion>=2?REGION_SIZE:0))*.22,(z+(this.world.coordinates?.y||0)*(this.world.terrainVersion===2?REGION_SIZE:0))*.22,this.world.seedNumber),fine=noise((x+(this.world.coordinates?.x||0)*(this.world.terrainVersion===2?REGION_SIZE:0))*.85,(z+(this.world.coordinates?.y||0)*(this.world.terrainVersion===2?REGION_SIZE:0))*.85,this.world.seedNumber+28);color.copy(grass).lerp(forest,n*.65).multiplyScalar(.92+fine*.2);if(h<.4)color.lerp(bank,clamp((.42-h)*1.9,0,1));if(h>2)color.lerp(rock,clamp((h-2)/4,0,.9));colors.setXYZ(i,color.r,color.g,color.b);}colors.needsUpdate=true;}
  makeWater(){this.river=makeRiver(this.gl,this.scene,this.heightAt.bind(this));this.water=this.river.mesh;}
  createTreeMeshes(){for(const inst of this.treeInstances){this.staticGroup.remove(inst);inst.geometry.dispose();}this.treeInstances=[];const all=(this.world.renderTiles||this.world.tiles).filter(t=>t.tree&&this.heightAt(t.x+.5,t.y+.5)>.2);this.knownTrees=new Set((this.world.renderTiles||this.world.tiles).filter(t=>t.tree));const lists=[[],[],[]];for(const t of all)lists[t.variant>.55?0:t.variant>.4?1:2].push(t);this.treeTiles=all;
@@ -101,7 +101,7 @@ export class Renderer{
    this.buildingsGroup.add(o);this.buildingMeshes.set(b.id,o);changed=true;}
   if(changed)this.gl.shadowMap.needsUpdate=true;
  }
- syncPeople(time){const local=this.world.terrainVersion===3?this.world.citizens.filter(c=>Math.abs(c.x-this.camera.x)<180&&Math.abs(c.y-this.camera.y)<180):this.world.citizens;for(const [id,obj]of this.people)if(!local.some(c=>c.id===id)){this.villagersGroup.remove(obj);this.disposeGroup(obj);this.people.delete(id);}for(const c of local){let obj=this.people.get(c.id);if(!obj){obj=citizenModel(this.materials,c.color);this.people.set(c.id,obj);this.villagersGroup.add(obj);}const t=this.world.tile(c.x,c.y),height=t?.bridge ? this.bridgeHeights.get(t.x+','+t.y)??.65 : this.heightAt(c.x,c.y);obj.position.set(c.x,height+.015,c.y);if(c.path.length){obj.rotation.y=Math.atan2(c.path[0].x-c.x,c.path[0].y-c.y);const p=this.world.speed?Math.sin(time*9+c.id)*.5:0;obj.userData.limbs.forEach((l,i)=>l.rotation.x=i%2?p:-p);}else obj.userData.limbs.forEach(l=>l.rotation.x=0);}}
+ syncPeople(time){const local=this.world.terrainVersion===3?this.world.citizens.filter(c=>Math.abs(c.x-this.camera.x)<180&&Math.abs(c.y-this.camera.y)<180):this.world.citizens;for(const [id,obj]of this.people)if(!local.some(c=>c.id===id)){this.villagersGroup.remove(obj);this.disposeGroup(obj);this.people.delete(id);}for(const c of local){let obj=this.people.get(c.id);if(!obj){obj=citizenModel(this.materials,c.color);this.people.set(c.id,obj);this.villagersGroup.add(obj);}const bridgeY=this.bridgeHeights?.get(Math.floor(c.x)+','+Math.floor(c.y));const height=bridgeY===undefined?this.heightAt(c.x,c.y):bridgeY;obj.position.set(c.x,height+.015,c.y);if(c.path.length){obj.rotation.y=Math.atan2(c.path[0].x-c.x,c.path[0].y-c.y);const p=this.world.speed?Math.sin(time*9+c.id)*.5:0;obj.userData.limbs.forEach((l,i)=>l.rotation.x=i%2?p:-p);}else obj.userData.limbs.forEach(l=>l.rotation.x=0);}}
  resize(){const r=this.canvas.getBoundingClientRect();this.width=r.width;this.height=r.height;this.gl.setSize(r.width,r.height,false);this.post?.resize(Math.max(1,Math.round(r.width*this.gl.getPixelRatio())),Math.max(1,Math.round(r.height*this.gl.getPixelRatio())));this.viewCamera.aspect=r.width/Math.max(1,r.height);this.viewCamera.updateProjectionMatrix();this.updateCamera();}
  center(){this.camera={x:31.5,y:32.5};this.zoom=1;this.azimuth=.83;this.elevation=.79;this.updateCamera();}
  iso(x,y){return {x,y};}
@@ -140,13 +140,15 @@ export class Renderer{
   const root=new T.Group();root.name='sector '+key;this.scene.add(root);
   const chunk={cx,cy,key,group:root,tiles:[],terrain:null,treeInstances:[],
    knownTrees:new Set(),grassTiles:[],grassInst:null,rockTiles:[],rockInstances:null,rockScarInstances:null,
-   roadsGroup:null,bridgeHeights:new Map(),opacity:alpha,fade:null,signature:'',detail:false,detailGroup:null,detailFade:null,detailOpacity:0,currentGroup:null};
+   roadsGroup:null,bridgeHeights:new Map(),opacity:alpha,fade:null,signature:'',revision:-1,detail:false,detailGroup:null,detailFade:null,detailOpacity:0,currentGroup:null};
   try{
    this.scopeVisualChunk(chunk,()=>this.makeTerrain(cx,cy));
    chunk.signature='';
    chunk.fade=this.fadeObjects([root],alpha);
    this.chunkVisuals.set(key,chunk);
-   if(chunkDistance(cx,cy,this.camera.x,this.camera.y)<110)this.addVisualDetail(chunk);
+   // La vegetación se prepara de forma escalonada en updateVisualChunks,
+   // no durante la construcción de varios sectores de terreno en un fotograma.
+   if(alpha>=.99&&chunkDistance(cx,cy,this.camera.x,this.camera.y)<80)this.addVisualDetail(chunk);
    this.rebuildBridgeHeights();return chunk;
   }catch(error){
    this.scene.remove(root);this.disposeGroup(root);
@@ -161,6 +163,7 @@ export class Renderer{
   // El relieve lejano es determinista y no llena la caché del juego.
   chunk.tiles=this.world.chunks.getChunk(chunk.cx,chunk.cy);
   chunk.signature=this.visualSignature(chunk.tiles);
+  chunk.revision=this.world.chunks.revision(chunk.cx,chunk.cy);
   const group=new T.Group();group.name='vegetacion y caminos';chunk.group.add(group);
   chunk.currentGroup=group;
   try{
@@ -220,6 +223,8 @@ export class Renderer{
  }
  refreshVisualChunk(chunk){
   if(!chunk.detail)return;
+  const revision=this.world.chunks.revision(chunk.cx,chunk.cy);
+  if(revision===chunk.revision)return;
   const activeTiles=this.world.chunks.getChunk(chunk.cx,chunk.cy);
   if(activeTiles!==chunk.tiles||this.visualSignature(chunk.tiles)!==chunk.signature){
    const {cx,cy,opacity}=chunk;
@@ -229,6 +234,7 @@ export class Renderer{
   if(chunk.detail)this.scopeVisualChunk(chunk,()=>{
    this.refreshTrees();this.refreshRocks();this.refreshGrass();
   });
+  chunk.revision=revision;
  }
  // Un horizonte de 5×5 sectores sigue a la cámara continuamente.
  // Cada fotograma aproxima su visibilidad; se construye como máximo un sector por pasada.
@@ -243,8 +249,9 @@ export class Renderer{
   const wanted=desiredChunks(this.camera.x,this.camera.y,VISUAL_RADIUS,renderDistance);
   // Horizonte ampliado por tandas: dos sectores de relieve sencillo
   // por fotograma si hay margen; solo uno cuando bajan los FPS.
-  if(time-this.lastVisualBuild>.015){
-   let budget=dt>.038?1:2;
+  if(time-this.lastVisualBuild>.028){
+   // Máximo un sector de relieve por pasada para evitar picos de CPU.
+   let budget=1;
    for(const next of wanted){
     if(!budget)break;
     if(next.opacity<=.005||this.chunkVisuals.has(next.key))continue;
@@ -260,7 +267,7 @@ export class Renderer{
    if(Math.abs(chunk.opacity-target)<.001)chunk.opacity=target;
    for(const material of chunk.fade.materials)material.opacity=chunk.opacity;
    const distance=chunkDistance(chunk.cx,chunk.cy,this.camera.x,this.camera.y);
-   if(!chunk.detail&&distance<120&&time-this.lastDetailBuild>.11){
+   if(!chunk.detail&&distance<120&&time-this.lastDetailBuild>.18){
     this.addVisualDetail(chunk);this.lastDetailBuild=time;
    }
    if(chunk.detail){
@@ -282,7 +289,12 @@ export class Renderer{
   if(!this.chunkVisuals)return;
   const rx=Math.floor(this.camera.x/SIZE),ry=Math.floor(this.camera.y/SIZE);
   if(!this.world.setViewRegion(rx,ry))return;
-  this.river.refreshBed(this.heightAt.bind(this),{x:rx*SIZE+32,y:ry*SIZE+32});
+  // La textura de agua cubre varias regiones: actualizarla solo cuando la
+  // cámara se aleja lo suficiente, no en cada frontera de 64 casillas.
+  if(Math.max(Math.abs(this.camera.x-this.waterBedCenter.x),Math.abs(this.camera.y-this.waterBedCenter.y))>112){
+   this.waterBedCenter={x:this.camera.x,y:this.camera.y};
+   this.river.refreshBed(this.heightAt.bind(this),this.waterBedCenter);
+  }
   this.lastVisualKey='';this.miniKey='';
   this.syncBuildings();
  }
@@ -392,7 +404,8 @@ export class Renderer{
   this.world=w;this.chunkVisuals=w.terrainVersion===3?new Map():null;
   this.linePreview=null;this.selected=null;this.buildMode=null;this.gatherMode=false;this.quarryArea.visible=false;this.quarryAreaKey='';
   this.lastDay=-1;this.lastSeason=-1;this.lastVisualKey='';this.lastVisualTime=0;this.lastVisualBuild=-100;this.lastDetailBuild=-100;this.adaptiveHorizon=new AdaptiveHorizon();
-  this.river.refreshBed(this.heightAt.bind(this),{x:w.terrainVersion===3?w.viewRegion.x*SIZE+32:32,y:w.terrainVersion===3?w.viewRegion.y*SIZE+32:32});
+  this.waterBedCenter={x:w.terrainVersion===3?w.viewRegion.x*SIZE+32:32,y:w.terrainVersion===3?w.viewRegion.y*SIZE+32:32};
+  this.river.refreshBed(this.heightAt.bind(this),this.waterBedCenter);
   if(this.chunkVisuals)this.makeVisualChunk(w.viewRegion.x,w.viewRegion.y,1);
   else{this.makeTerrain();this.makeVegetation();this.makeRocks();this.makeRoads();}
   this.makeAnimals();this.syncBuildings();this.updateSeason();
