@@ -4,11 +4,12 @@ const browser=await chromium.launch({headless:true,args:['--use-gl=angle','--use
 const page=await browser.newPage({viewport:{width:1280,height:800}});
 const errors=[];
 page.on('pageerror',e=>errors.push('JavaScript: '+e.message));
-page.on('console',m=>{if(m.type()==='error'&&/No se pudo iniciar|Uncaught|Error de shader/.test(m.text()))errors.push('Consola: '+m.text());});
+page.on('console',m=>{if(m.type()==='error')errors.push('Consola: '+m.text());});
 try{
  await page.goto('http://127.0.0.1:8765',{waitUntil:'domcontentloaded'});
  await page.waitForFunction(()=>!document.getElementById('world-loading'),{timeout:60000});
- assert.equal(await page.locator('body.graphics-3d').count(),1,'El renderizador debe iniciarse en WebGL 3D, no en 2D de respaldo');
+ const is3d=await page.locator('body.graphics-3d').count();
+ if(!is3d){const status=await page.locator('#graphics-status').innerText();console.error('Fallo WebGL:',status,'Errores:',errors);throw Error('El renderizador no inició WebGL 3D: '+status+' | '+errors.join(' | '));}
  await page.locator('#start-game').click();
  await page.waitForTimeout(1800);
  await page.keyboard.down('d');await page.waitForTimeout(1500);await page.keyboard.up('d');
