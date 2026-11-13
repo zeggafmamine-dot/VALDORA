@@ -3,15 +3,15 @@
 export const CHUNK_WIDTH=64;
 export const CAMERA_DISTANCE=112; // La cámara muestra cuatro veces el ancho inicial original (28).
 export const DEFAULT_GRAPHICS_QUALITY='low';
-export const VISUAL_RADIUS=6;
-export const MAX_VISUAL_CHUNKS=135;
-export const RETIRE_RADIUS=7;
-export const FULL_DETAIL_DISTANCE=246;
-export const FADE_OUT_DISTANCE=320;
+export const VISUAL_RADIUS=4;
+export const MAX_VISUAL_CHUNKS=70;
+export const RETIRE_RADIUS=5;
+export const FULL_DETAIL_DISTANCE=150;
+export const FADE_OUT_DISTANCE=224;
 export const FADE_BAND=FADE_OUT_DISTANCE-FULL_DETAIL_DISTANCE; // 74 casillas, sin cambios.
-export const MIN_HORIZON=224;
-export const INITIAL_HORIZON=256;
-export const MAX_HORIZON=320;
+export const MIN_HORIZON=160;
+export const INITIAL_HORIZON=180;
+export const MAX_HORIZON=224;
 export const FADE_SECONDS=.9;
 export const id=(x,y)=>x+','+y;
 const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
