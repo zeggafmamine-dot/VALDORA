@@ -6,9 +6,13 @@ export const VIEW_SIZE=64;
 const key=(x,y)=>x+','+y;
 const valid=n=>Number.isSafeInteger(n)&&Math.abs(n)<Number.MAX_SAFE_INTEGER/4;
 export class ChunkStore{
- constructor(createTile){this.createTile=createTile;this.cache=new Map();this.changes=new Map();this.region={x:0,y:0};}
+ constructor(createTile){this.createTile=createTile;this.cache=new Map();this.changes=new Map();this.revisions=new Map();this.region={x:0,y:0};}
  get chunkCount(){return this.cache.size;}
  get changedCount(){return this.changes.size;}
+ // Versiones de modificación independientes de la caché. Evitan refrescar
+ // geometría y recrear 4.096 casillas cada día si el sector no ha cambiado.
+ revision(cx,cy){return this.revisions.get(key(cx,cy))||0;}
+ touch(x,y){const k=key(Math.floor(x/CHUNK_SIZE),Math.floor(y/CHUNK_SIZE));this.revisions.set(k,(this.revisions.get(k)||0)+1);}
  // La región de juego y cada sector comparten el mismo tamaño: 64 × 64.
  isActive(cx,cy){return Math.abs(cx-this.region.x)<=1&&Math.abs(cy-this.region.y)<=1;}
  getChunk(cx,cy){
@@ -29,6 +33,7 @@ export class ChunkStore{
  remember(t){
   if(!t)return;
   this.changes.set(key(t.x,t.y),{tree:!!t.tree,rock:!!t.rock,road:!!t.road,bridge:!!t.bridge,bridgeAxis:t.bridgeAxis,marked:!!t.marked,stoneLeft:stoneRemaining(t),stoneScar:!!t.stoneScar});
+  this.touch(t.x,t.y);
  }
  override(x,y,state){
   if(!valid(x)||!valid(y))throw Error('Casilla no válida');
@@ -37,14 +42,16 @@ export class ChunkStore{
   const stoneLeft=state.stoneLeft===undefined?(state.rock?stoneCapacity(base):0):state.stoneLeft;
   if(!Number.isInteger(stoneLeft)||stoneLeft<0||stoneLeft>MAX_STONE_PER_TILE)throw Error('Piedra no válida');
   const value={tree:!!state.tree,rock:!!state.rock&&stoneLeft>0,road:!!state.road,bridge:!!state.bridge,marked:!!state.marked,bridgeAxis:['x','y'].includes(state.bridgeAxis)?state.bridgeAxis:undefined,stoneLeft,stoneScar:!!state.stoneScar};
-  this.changes.set(key(x,y),value);
+  this.changes.set(key(x,y),value);this.touch(x,y);
   const cx=Math.floor(x/CHUNK_SIZE),cy=Math.floor(y/CHUNK_SIZE),chunk=this.cache.get(key(cx,cy));
   if(chunk)Object.assign(chunk[(y-cy*CHUNK_SIZE)*CHUNK_SIZE+x-cx*CHUNK_SIZE],value);
  }
  setRegion(rx,ry){
   if(!valid(rx)||!valid(ry))return null;
-  this.region={x:rx,y:ry};const tiles=[];
-  for(let y=ry*VIEW_SIZE;y<(ry+1)*VIEW_SIZE;y++)for(let x=rx*VIEW_SIZE;x<(rx+1)*VIEW_SIZE;x++)tiles.push(this.tile(x,y));
+  this.region={x:rx,y:ry};
+  // La región lógica coincide exactamente con un sector: evitar 4.096
+  // búsquedas, operaciones LRU y copias de referencias por cada frontera.
+  const tiles=this.getChunk(rx,ry);
   this.queueNearby();this.trim();return tiles;
  }
  // Solo se precarga el primer anillo de vecinos; no se genera el segundo anillo innecesariamente.
