@@ -10,7 +10,7 @@ page.on('console',m=>{if(m.type()==='error')errors.push('Consola: '+m.text());})
 await page.route('**/game.mjs',async route=>{
  const response=await route.fetch();
  const source=await response.text();
- await route.fulfill({status:response.status(),contentType:'text/javascript',body:source+'\nwindow.__valdoraSmoke={world,renderer};'});
+ await route.fulfill({status:response.status(),contentType:'text/javascript',body:source+'\nwindow.__valdoraSmoke={world,renderer,chooseBuilding,actAt,updateUI};'});
 });
 try{
  await page.goto('http://127.0.0.1:8765',{waitUntil:'domcontentloaded'});
@@ -27,7 +27,7 @@ try{
  await page.locator('#menu-resume').click();
  // Probar la cantera y su representación real dentro del renderizador WebGL.
  const mine=await page.evaluate(async()=>{
-  const {world,renderer}=window.__valdoraSmoke;
+  const {world,renderer,chooseBuilding,actAt,updateUI}=window.__valdoraSmoke;
   const {stoneRemaining}=await import('./stone-deposits.mjs');
   const T=await import('./vendor/three.module.js');
   world.resources.wood=200;world.resources.stone=200;let site=null;
@@ -35,9 +35,21 @@ try{
    if(world.canPlace('quarry',x,y).ok){site={x,y};break outer;}
   }
   if(!site)throw Error('No existe terreno compatible para la cantera.');
-  const placed=world.place('quarry',site.x,site.y);
-  if(!placed.ok)throw Error('Fallo al construir cantera: '+placed.reason);
-  placed.building.progress=1;placed.building.workers=2;world.assignJobs();
+  chooseBuilding('quarry');
+  const originalPick=renderer.pick;
+  renderer.pick=()=>site;
+  try{actAt({x:0,y:0});}finally{renderer.pick=originalPick;}
+  const placed={building:world.buildings.find(b=>b.type==='quarry'&&b.x===site.x&&b.y===site.y)};
+  if(!placed.building)throw Error('La cantera no se construyó desde la interfaz.');
+  const panel=document.querySelector('#selection-panel');
+  if(panel.hidden||!panel.querySelector('[data-quarry-reserve]'))
+   throw Error('La cantera recién colocada debe abrir su panel con unidades disponibles.');
+  if(renderer.buildMode!==null)throw Error('No salió del modo construcción para mostrar la cantera.');
+  const reserveDuringConstruction=panel.querySelector('[data-quarry-reserve]').textContent.trim();
+  const constructionStatus=panel.querySelector('[data-quarry-status]').textContent.trim();
+  const reserveBefore=world.stoneAround(placed.building);
+  placed.building.progress=1;placed.building.workers=2;world.assignJobs();updateUI();
+  const productionStatus=panel.querySelector('[data-quarry-status]').textContent.trim();
   const rock=world.findQuarryDeposit(placed.building),before=stoneRemaining(rock);
   const chunk=[...renderer.chunkVisuals.values()].find(c=>c.detail&&c.rockTiles.some(t=>t.x===rock.x&&t.y===rock.y));
   if(!chunk)throw Error('No se representó en 3D la roca explotable cercana.');
@@ -45,15 +57,23 @@ try{
   const matrix=new T.Matrix4();chunk.rockInstances.getMatrixAt(index,matrix);
   const beforeScale=new T.Vector3();matrix.decompose(new T.Vector3(),new T.Quaternion(),beforeScale);
   const stock=world.resources.stone;
-  world.tick();
+  world.tick();updateUI();
+  const reserveAfter=world.stoneAround(placed.building);
+  const reserveShown=panel.querySelector('[data-quarry-reserve]').textContent.trim();
   renderer.scopeVisualChunk(chunk,()=>renderer.refreshRocks());
   chunk.rockInstances.getMatrixAt(index,matrix);
   const afterScale=new T.Vector3();matrix.decompose(new T.Vector3(),new T.Quaternion(),afterScale);
   renderer.invalidate();
   return {stoneBefore:before,stoneAfter:stoneRemaining(rock),stockBefore:stock,stockAfter:world.resources.stone,
-   beforeScale:beforeScale.x,afterScale:afterScale.x,scar:rock.stoneScar,workerCount:placed.building.workers};
+   beforeScale:beforeScale.x,afterScale:afterScale.x,scar:rock.stoneScar,workerCount:placed.building.workers,
+   reserveBefore,reserveAfter,reserveShown,reserveDuringConstruction,constructionStatus,productionStatus};
  });
  assert.equal(mine.workerCount,2);
+ assert.equal(mine.constructionStatus,'En construcción');
+ assert.equal(mine.productionStatus,'En explotación');
+ assert.equal(mine.reserveDuringConstruction,mine.reserveBefore.toLocaleString('es')+' unidades');
+ assert.equal(mine.reserveBefore-mine.reserveAfter,4);
+ assert.equal(mine.reserveShown,mine.reserveAfter.toLocaleString('es')+' unidades');
  assert.equal(mine.stockAfter-mine.stockBefore,4);
  assert.equal(mine.stoneBefore-mine.stoneAfter,4);
  assert.equal(mine.scar,true);
