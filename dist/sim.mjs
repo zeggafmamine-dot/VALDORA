@@ -1,5 +1,5 @@
 import {planLine} from './paths.mjs';
-import {terrainSample,validCoordinates,REGION_SIZE} from './terrain.mjs';
+import {terrainSample,validCoordinates,REGION_SIZE,isEconomicTerrain} from './terrain.mjs';
 import {ChunkStore} from './chunks.mjs';
 import {QUARRY_RADIUS,STONE_PER_WORKER,stoneCapacity,stoneRemaining} from './stone-deposits.mjs';
 export const SIZE=64;
@@ -96,7 +96,8 @@ export class World{
  canPlace(type,x,y){const d=BUILDINGS[type];if(!d||type==='hall')return {ok:false,reason:'Selecciona un edificio.'};if(!Number.isInteger(x)||!Number.isInteger(y))return {ok:false,reason:'Fuera del mapa.'};
   for(let dy=0;dy<d.h;dy++)for(let dx=0;dx<d.w;dx++){
    const t=this.tile(x+dx,y+dy);if(!t)return {ok:false,reason:'Fuera del mapa.'};
-   if(t.building)return {ok:false,reason:'Este terreno ya está ocupado.'};
+   if(!isEconomicTerrain(t))return {ok:false,reason:'Alta montaña protegida: no se permite construir ni realizar actividades económicas.'};
+    if(t.building)return {ok:false,reason:'Este terreno ya está ocupado.'};
    if(d.waterOnly){if(t.type!=='water'||t.bridge)return {ok:false,reason:'Coloca el puente sobre el agua.'};}
    else if(t.type!=='grass'||t.bridge)return {ok:false,reason:'Necesitas terreno llano y seco.'};
    if(type==='road'&&t.road)return {ok:false,reason:'Ya existe un camino aquí.'};
@@ -112,7 +113,7 @@ export class World{
  }
  previewLine(type,start,end){return planLine(this,type,start,end);}
  placeLine(type,start,end){const plan=this.previewLine(type,start,end);if(!plan.ok)return plan;if(this.gameOver)return {...plan,ok:false,reason:'La partida ha terminado.'};for(const [key,n]of Object.entries(plan.cost))this.resources[key]-=n;const cleared=new Set();for(const p of plan.cells){if(!p.action)continue;const t=this.tile(p.x,p.y);t[p.action]=true;if(type==='bridge'){t.bridgeAxis=plan.axis;t.road=false;}t.tree=false;t.rock=false;t.stoneLeft=0;t.marked=false;cleared.add(p.x+','+p.y);this.rememberTile(t);}this.gatherQueue=this.gatherQueue.filter(q=>!cleared.has(q.x+','+q.y));if(plan.count)this.log(`${type==='road'?'Camino':'Puente'} completado: ${plan.count} tramos.`, 'success');return plan;}
- markGather(x,y){const t=this.tile(x,y);if(!t||(!t.tree&&!t.rock))return {ok:false,reason:'Selecciona un árbol o una roca.'};if(t.marked)return {ok:false,reason:'Ya está marcado para recoger.'};t.marked=true;this.rememberTile(t);this.gatherQueue.push({x:t.x,y:t.y,progress:0});return {ok:true};}
+ markGather(x,y){const t=this.tile(x,y);if(!isEconomicTerrain(t))return {ok:false,reason:'En alta montaña no se pueden recolectar recursos.'};if(!t.tree&&!t.rock)return {ok:false,reason:'Selecciona un árbol o una roca.'};if(t.marked)return {ok:false,reason:'Ya está marcado para recoger.'};t.marked=true;this.rememberTile(t);this.gatherQueue.push({x:t.x,y:t.y,progress:0});return {ok:true};}
  demolish(id){const b=this.buildings.find(b=>b.id===id);if(!b||b.type==='hall')return false;const d=BUILDINGS[b.type];for(const [r,n]of Object.entries(d.cost))this.resources[r]=Math.min(this.storage,this.resources[r]+Math.floor(n*.5));for(let dy=0;dy<b.h;dy++)for(let dx=0;dx<b.w;dx++){const t=this.tile(b.x+dx,b.y+dy);if(t){t.building=null;if(this.terrainVersion===3)this.buildingCells.delete(t.x+','+t.y);this.rememberTile(t);}}this.buildings=this.buildings.filter(v=>v.id!==id);this.assignJobs();this.log(`${d.name}: recuperado el 50 % de los materiales.`);return true;}
  addCitizen(){const i=this.nextId++;this.citizens.push({id:i,name:NAMES[(i-6)%NAMES.length]||'Colono',age:18+Math.floor(hash(i,3,this.seedNumber)*32),x:30.5+hash(i,1),y:32+hash(i,2),job:null,path:[],wait:0,color:['#c3a76d','#9cab98','#ad7361','#d0bd94','#8cabb5','#9e909f'][i%6]});}
  assignJobs(){let free=this.citizens.slice();for(const c of free)c.job=null;for(const b of this.buildings){if(b.progress<1)b.workers=0;const want=Math.min(b.workers,free.length,BUILDINGS[b.type].maxWorkers);b.workers=want;for(let n=0;n<want;n++)free.shift().job=b.id;}}
@@ -122,7 +123,7 @@ export class World{
   const cx=b.x+b.w/2,cy=b.y+b.h/2,r=QUARRY_RADIUS;
   if(b.targetStone&&Number.isSafeInteger(b.targetStone.x)&&Number.isSafeInteger(b.targetStone.y)){
    const t=this.tile(b.targetStone.x,b.targetStone.y);
-   if(t&&stoneRemaining(t)>0&&t.rock&&!t.building&&!t.road&&!t.bridge&&
+   if(isEconomicTerrain(t)&&stoneRemaining(t)>0&&t.rock&&!t.building&&!t.road&&!t.bridge&&
     Math.hypot(t.x+.5-cx,t.y+.5-cy)<=r)return t;
   }
   let best=null,smallest=Infinity;
@@ -131,7 +132,7 @@ export class World{
    const distance=(x+.5-cx)**2+(y+.5-cy)**2;
    if(distance>r*r||distance>=smallest)continue;
    const t=this.tile(x,y);
-   if(t&&t.rock&&stoneRemaining(t)>0&&!t.building&&!t.road&&!t.bridge){best=t;smallest=distance;}
+   if(isEconomicTerrain(t)&&t.rock&&stoneRemaining(t)>0&&!t.building&&!t.road&&!t.bridge){best=t;smallest=distance;}
   }
   if(best)b.targetStone={x:best.x,y:best.y};
   else b.targetStone=null;
@@ -162,7 +163,7 @@ export class World{
   for(let y=Math.floor(cy-r);y<=Math.ceil(cy+r);y++)for(let x=Math.floor(cx-r);x<=Math.ceil(cx+r);x++){
    if((x+.5-cx)**2+(y+.5-cy)**2>r*r)continue;
    const t=this.tile(x,y);
-   if(t&&t.rock&&!t.building&&!t.road&&!t.bridge)total+=stoneRemaining(t);
+   if(isEconomicTerrain(t)&&t.rock&&!t.building&&!t.road&&!t.bridge)total+=stoneRemaining(t);
   }
   return total;
  }
@@ -170,27 +171,46 @@ export class World{
   // El bosque que realmente produce coincide con el círculo dibujado.
   const cx=b.x+b.w/2,cy=b.y+b.h/2;let trees=0;
   for(let y=Math.floor(cy-radius);y<=Math.ceil(cy+radius);y++)
-   for(let x=Math.floor(cx-radius);x<=Math.ceil(cx+radius);x++)
-    if((x+.5-cx)**2+(y+.5-cy)**2<=radius*radius&&this.tile(x,y)?.tree)trees++;
+   for(let x=Math.floor(cx-radius);x<=Math.ceil(cx+radius);x++){
+    if((x+.5-cx)**2+(y+.5-cy)**2>radius*radius)continue;
+    const t=this.tile(x,y);
+    if(isEconomicTerrain(t)&&t.tree)trees++;
+   }
   return Math.min(1,trees/18);
  }
  tick(){if(this.gameOver)return;this.totalDays++;this.day++;if(this.day>30){this.day=1;this.season++;if(this.season>3){this.season=0;this.year++;}this.newSeason();}
   const before={...this.resources};
   const unfinished=this.buildings.filter(b=>b.progress<1),builders=this.builders;
   if(unfinished.length&&builders>0){let effort=builders/2;for(const b of unfinished){const d=BUILDINGS[b.type],needed=(1-b.progress)*d.days,use=Math.min(effort,needed);b.progress=Math.min(1,b.progress+use/d.days);effort-=use;if(b.progress>=.99999){b.progress=1;b.workers=Math.min(d.maxWorkers,Math.max(0,this.idle-1));this.assignJobs();this.log(`${d.name}: construcción terminada.`,'success');}if(effort<=0)break;}}
-  if(builders>0&&this.gatherQueue.length){const q=this.gatherQueue[0];q.progress+=builders*.5;if(q.progress>=1){const t=this.tile(q.x,q.y);if(t?.tree){this.resources.wood+=12;t.tree=false;}if(t?.rock){
-    const extracted=Math.min(10,stoneRemaining(t),Math.max(0,this.storage-this.resources.stone));
-    this.resources.stone+=extracted;t.stoneLeft=stoneRemaining(t)-extracted;t.stoneScar=t.stoneScar||extracted>0;t.rock=t.stoneLeft>0;
+  if(builders>0&&this.gatherQueue.length){
+   const q=this.gatherQueue[0],t=this.tile(q.x,q.y);
+   // También se aplican las restricciones a órdenes de recolección
+   // guardadas antes de la actualización, no solo a órdenes nuevas.
+   if(!isEconomicTerrain(t)){
+    if(t?.marked){t.marked=false;this.rememberTile(t);}
+    this.gatherQueue.shift();
+   }else{
+    q.progress+=builders*.5;
+    if(q.progress>=1){
+     if(t.tree){this.resources.wood+=12;t.tree=false;}
+     if(t.rock){
+      const extracted=Math.min(10,stoneRemaining(t),Math.max(0,this.storage-this.resources.stone));
+      this.resources.stone+=extracted;t.stoneLeft=stoneRemaining(t)-extracted;
+      t.stoneScar=t.stoneScar||extracted>0;t.rock=t.stoneLeft>0;
+     }
+     t.marked=!!t.rock;this.rememberTile(t);
+     if(t.rock)q.progress=0;
+     else this.gatherQueue.shift();
+    }
    }
-   if(t){t.marked=!!t.rock;this.rememberTile(t);}
-   if(t?.rock){q.progress=0;}else this.gatherQueue.shift();}}
+  }
   for(const b of this.buildings){if(b.progress<1||b.paused||!b.workers)continue;const w=b.workers;
    if(b.type==='farm')this.resources.food+=[2,3,4,0][this.season]*w;
    if(b.type==='gatherer')this.resources.food+=3*w*this.forestAt(b)*(this.season===3?.6:1);
    if(b.type==='fisher')this.resources.food+=2.6*w;
    if(b.type==='pasture')this.resources.food+=2.4*w;
    if(b.type==='quarry')this.mineQuarry(b,STONE_PER_WORKER*w);
-   if(b.type==='forester'){this.resources.wood+=3*w*this.forestAt(b,8);if(this.totalDays%3===0){for(let tries=0;tries<12;tries++){const cx=b.x+b.w/2,cy=b.y+b.h/2;let x=Math.floor(cx+(hash(this.totalDays+tries,1,this.seedNumber)*2-1)*8),y=Math.floor(cy+(hash(1,this.totalDays+tries,this.seedNumber)*2-1)*8);if((x+.5-cx)**2+(y+.5-cy)**2>64)continue;const t=this.tile(x,y);if(t&&t.type==='grass'&&!t.building&&!t.road&&!t.rock&&!t.tree){t.tree=true;this.rememberTile(t);break;}}}}
+   if(b.type==='forester'){this.resources.wood+=3*w*this.forestAt(b,8);if(this.totalDays%3===0){for(let tries=0;tries<12;tries++){const cx=b.x+b.w/2,cy=b.y+b.h/2;let x=Math.floor(cx+(hash(this.totalDays+tries,1,this.seedNumber)*2-1)*8),y=Math.floor(cy+(hash(1,this.totalDays+tries,this.seedNumber)*2-1)*8);if((x+.5-cx)**2+(y+.5-cy)**2>64)continue;const t=this.tile(x,y);if(isEconomicTerrain(t)&&t.type==='grass'&&!t.building&&!t.road&&!t.rock&&!t.tree){t.tree=true;this.rememberTile(t);break;}}}}
    if(b.type==='woodcutter'){const input=Math.min(this.resources.wood,2*w);this.resources.wood-=input;this.resources.firewood+=input*2.5;}
   }
   const foodNeed=this.population*.45,heatNeed=this.population*(this.season===3?.2:.025);
@@ -214,7 +234,7 @@ export class World{
   if(this.capacity>this.population&&this.resources.food>this.population*6&&this.happiness>=50){const n=Math.min(2,this.capacity-this.population);for(let i=0;i<n;i++)this.addCitizen();this.log(`${n} nuevos colonos se han unido a la aldea.`,'success');this.assignJobs();}
   else if(this.capacity<=this.population)this.log('No hay viviendas libres para recibir nuevos colonos.');
  }
- passable(x,y){const t=this.tile(x,y);return !!t&&(t.type==='grass'||t.bridge)&&!t.building;}
+ passable(x,y){const t=this.tile(x,y);return isEconomicTerrain(t)&&(t.type==='grass'||t.bridge)&&!t.building;}
  findPath(sx,sy,tx,ty){
   sx=Math.floor(sx);sy=Math.floor(sy);tx=Math.floor(tx);ty=Math.floor(ty);
   if(!this.passable(tx,ty)||Math.abs(sx-tx)+Math.abs(sy-ty)>90)return [];

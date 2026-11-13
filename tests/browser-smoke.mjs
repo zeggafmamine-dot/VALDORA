@@ -223,6 +223,30 @@ try{
  assert.ok(Math.abs(biomes3D.actualCover-biomes3D.expectedCover)<1e-6);
  assert.ok(Math.abs(biomes3D.actualHeight-biomes3D.expectedHeight)<1e-4);
  assert.ok(biomes3D.biome&&biomes3D.distantBiome);
+ const alpineTexture=await page.evaluate(()=>{
+  const {renderer}=window.__valdoraSmoke;
+  const mat=renderer.materials.ground,texture=renderer.materials.alpineTexture;
+  const shader={
+   uniforms:{},vertexShader:'#include <begin_vertex>',
+   fragmentShader:'#include <map_fragment>'
+  };
+  mat.onBeforeCompile(shader);
+  return {
+   texturePresent:!!texture,
+   width:texture?.image?.width,
+   shaderUniform:shader.uniforms.uAlpineSurface?.value===texture,
+   thresholdBlend:shader.fragmentShader.includes('smoothstep(13.45,14.45,vTerrainWorld.y)'),
+   sampledTexture:shader.fragmentShader.includes('texture2D(uAlpineSurface'),
+   hasLegacyGrass:shader.fragmentShader.includes('detailedGround')
+  };
+ });
+ assert.equal(alpineTexture.texturePresent,true,'Alta montaña necesita una textura distinta');
+ assert.equal(alpineTexture.width,256,'La textura alpina debe ser ligera y compartida');
+ assert.equal(alpineTexture.shaderUniform,true,'El shader 3D debe recibir la textura de nieve y roca');
+ assert.equal(alpineTexture.thresholdBlend,true,'Debe transicionar a partir de altura 14');
+ assert.equal(alpineTexture.sampledTexture,true,'No basta con cambiar los colores del terreno');
+ assert.equal(alpineTexture.hasLegacyGrass,true,'Las praderas bajas siguen utilizando su textura original');
+
 
 
  // La geometría de las copas se debe construir UNA sola vez, incluso si
