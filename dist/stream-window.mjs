@@ -1,6 +1,8 @@
 // Planificador puro para un horizonte móvil alrededor de la cámara.
 // Horizonte tres veces mayor (170 → 510 unidades), sin ampliar los sectores de 64x64.
 // La banda de aparición permanece en 74 unidades, igual que en el mapa anterior.
+export const CAMERA_DISTANCE=84; // Antes 28: tres veces más mundo por eje al iniciar.
+export const DEFAULT_GRAPHICS_QUALITY='low';
 export const VISUAL_RADIUS=8;
 export const MAX_VISUAL_CHUNKS=300;
 export const RETIRE_RADIUS=9;
