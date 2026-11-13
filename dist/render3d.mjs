@@ -73,11 +73,11 @@ export class Renderer{
   const names=['staticGroup','terrain','treeInstances','knownTrees','grassTiles','grassInst','rockTiles','rockInstances','roadsGroup','bridgeHeights'];
   const before=Object.fromEntries(names.map(name=>[name,this[name]]));
   const prevTiles=this.world.renderTiles;
-  for(const name of names)this[name]=chunk[name];
+  for(const name of names)this[name]=name==='staticGroup'?chunk.group:chunk[name];
   this.world.renderTiles=chunk.tiles;
   try{return work();}
   finally{
-   for(const name of names){chunk[name]=this[name];this[name]=before[name];}
+   for(const name of names){if(name!=='staticGroup')chunk[name]=this[name];this[name]=before[name];}
    this.world.renderTiles=prevTiles;
   }
  }
