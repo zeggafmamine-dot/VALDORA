@@ -25,7 +25,7 @@ export class Renderer{
  line(points,color,width=1){const c=this.ctx;c.beginPath();c.moveTo(points[0].x,points[0].y);for(let i=1;i<points.length;i++)c.lineTo(points[i].x,points[i].y);c.strokeStyle=color;c.lineWidth=width;c.stroke();}
  ellipse(x,y,rx,ry,color){const c=this.ctx;c.beginPath();c.ellipse(x,y,rx,ry,0,0,Math.PI*2);c.fillStyle=color;c.fill();}
  diamond(x,y,w=1,h=1,z=0,color,stroke){this.poly([this.iso(x,y,z),this.iso(x+w,y,z),this.iso(x+w,y+h,z),this.iso(x,y+h,z)],color,stroke);}
- draw(time){this.time=time;const c=this.ctx,w=this.world,pal=palettes[w.season],z=this.zoom;if(w.terrainVersion===3){const mid=this.unproject(this.width/2,this.height/2);w.setViewRegion(Math.floor(mid.x/SIZE),Math.floor(mid.y/SIZE));}
+ draw(time){this.time=time;const c=this.ctx,w=this.world,pal=palettes[w.season],z=this.zoom;if(w.terrainVersion===3&&time-(this.lastPrefetch||0)>.1){w.chunks.prefetchNext(1);this.lastPrefetch=time;}if(w.terrainVersion===3){const mid=this.unproject(this.width/2,this.height/2);w.setViewRegion(Math.floor(mid.x/SIZE),Math.floor(mid.y/SIZE));}
   c.setTransform(this.dpr,0,0,this.dpr,0,0);c.fillStyle=pal.grass[0];c.fillRect(0,0,this.width,this.height);
   c.translate(this.width/2-this.camera.x*z,this.height/2-this.camera.y*z);c.scale(z,z);
   const corners=[this.unproject(-150,-200),this.unproject(this.width+150,-200),this.unproject(this.width+150,this.height+150),this.unproject(-150,this.height+150)];
