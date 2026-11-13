@@ -205,6 +205,52 @@ try{
  assert.equal(performance.lowWaterShader,1,'La calidad Ligera debe utilizar el shader simplificado del agua');
  assert.equal(performance.unnecessaryChunkReads,0,'No regenerar sectores intactos entre días');
 
+ // La geometría de las copas se debe construir UNA sola vez, incluso si
+ // aparecen varias regiones en la cámara.
+ const geometryReuse=await page.evaluate(async()=>{
+  const {renderer}=window.__valdoraSmoke;
+  const T=await import('./vendor/three.module.js');
+  const first=renderer.treeTemplate(0),second=renderer.treeTemplate(0);
+  const oak=renderer.treeTemplate(2);
+  const rock=renderer.rockTemplate(),sameRock=renderer.rockTemplate();
+  const active=[...renderer.chunkVisuals.values()].find(chunk=>chunk.detail&&chunk.treeInstances.length);
+  if(!active)throw Error('Falta vegetación detallada para probar geometría compartida.');
+  const known=[...first,...renderer.treeTemplate(1),...oak].map(x=>x.geometry);
+  const linked=active.treeInstances.every(inst=>known.includes(inst.geometry));
+  const disposable=new T.Group();
+  disposable.add(new T.InstancedMesh(first[0].geometry,first[0].material,1));
+  const original=first[0].geometry.dispose;
+  let disposed=0;
+  first[0].geometry.dispose=function(){disposed++;};
+  try{renderer.disposeGroup(disposable);}
+  finally{first[0].geometry.dispose=original;}
+  return {
+   reused:first===second,rockReused:rock===sameRock,
+   linked,knownCount:renderer.sharedChunkGeometries.size,
+   preserved:disposed===0,
+   sharedRock:renderer.sharedChunkGeometries.has(rock),
+   firstColor:renderer.materials.needles.color.getHexString()
+  };
+ });
+ assert.equal(geometryReuse.reused,true,'Los modelos de árboles deben reutilizarse entre sectores');
+ assert.equal(geometryReuse.rockReused,true,'Las rocas deben compartir geometría');
+ assert.equal(geometryReuse.linked,true,'Los árboles renderizados deben usar las geometrías comunes');
+ assert.equal(geometryReuse.preserved,true,'Eliminar un sector no debe destruir geometría compartida');
+ assert.equal(geometryReuse.sharedRock,true);
+ assert.ok(geometryReuse.knownCount>=5,'Debe existir una caché pequeña de geometrías');
+ const stationary=await page.evaluate(()=>{
+  const {renderer}=window.__valdoraSmoke;
+  renderer.syncPeople(renderer.time);
+  const original=renderer.heightAt;
+  let terrainSamples=0;
+  renderer.heightAt=function(...args){terrainSamples++;return original.apply(this,args);};
+  try{renderer.syncPeople(renderer.time+.016);}
+  finally{renderer.heightAt=original;}
+  return {terrainSamples,citizens:renderer.people.size};
+ });
+ assert.ok(stationary.citizens>0,'Debe haber habitantes en la partida de prueba');
+ assert.equal(stationary.terrainSamples,0,'Los aldeanos quietos no deben recalcular su altura');
+
  // Verificar el defecto real: antes incluso las hojas opacas y el suelo al
  // 100 % seguían sin escribir profundidad y se superponían según el ángulo.
  const foliage=await page.evaluate(async()=>{
