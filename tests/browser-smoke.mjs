@@ -19,5 +19,5 @@ try{
  assert.match(seed,/sector|Región|región/i);
  assert.deepEqual(errors,[],'La renderización y el cambio de región no deben producir excepciones');
  console.log('WebGL2 operativo; controles de cámara y streaming sin errores:',seed);
- await page.screenshot({path:'valdora-webgl-smoke.png'});
+ // No capturamos pantalla: las GPU software de CI ralentizan las capturas WebGL.
 }finally{await browser.close();}
