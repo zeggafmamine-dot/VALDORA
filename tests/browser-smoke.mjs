@@ -14,6 +14,8 @@ try{
  // El primer arranque debe seleccionar calidad Ligera.
  await page.locator('#settings-btn').click();
  assert.equal(await page.locator('[data-quality="low"].active').count(),1,'El juego debe iniciar en calidad Ligera');
+ assert.equal((await page.locator('#quality-indicator').innerText()).trim(),'Gráficos: Ligera');
+ assert.equal(await page.locator('body').getAttribute('data-graphics-quality'),'low');
  // Comprobación de arranque real; evitamos recargar en SwiftShader, que puede bloquear la navegación en CI.
  await page.locator('#menu-resume').click();
  await page.waitForTimeout(1200);
