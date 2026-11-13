@@ -1,5 +1,6 @@
 import {planLine} from './paths.mjs';
 import {terrainSample,validCoordinates,REGION_SIZE} from './terrain.mjs';
+import {ChunkStore} from './chunks.mjs';
 export const SIZE=64;
 export const SEASONS=[{name:'Primavera',short:'Prim.',temperature:14,color:'#a2bf76'},{name:'Verano',short:'Ver.',temperature:24,color:'#e7bd6b'},{name:'Otoño',short:'Oto.',temperature:10,color:'#c98e55'},{name:'Invierno',short:'Inv.',temperature:-5,color:'#b8d0dc'}];
 export const RESOURCES={wood:{name:'Madera',icon:'wood',color:'#c5a584'},stone:{name:'Piedra',icon:'stone',color:'#bcc4ca'},food:{name:'Alimentos',icon:'food',color:'#d9bf76'},firewood:{name:'Leña',icon:'fire',color:'#e6a06f'}};
@@ -25,37 +26,48 @@ function smooth(x,y,seed){const a=Math.floor(x),b=Math.floor(y),u=(x-a)**2*(3-2*
 const NAMES=['Elena','Mateo','Inés','Bruno','Alba','Nicolás','Clara','Tomás','Vera','Hugo','Lía','Gabriel','Nora','Leo','Sara','Iván','Emma','Adrián','Mara','Lucas','Aina','Amir','Noa','Oliver'];
 export class World{
  constructor(seed='VALDORA-2048',restored=null,coordinates={x:0,y:0}){
-  this.terrainVersion=restored?(restored.terrainVersion===2?2:1):2;this.coordinates=this.terrainVersion===2?(restored?restored.coordinates:coordinates):{x:0,y:0};
-  if(this.terrainVersion===2&&!validCoordinates(this.coordinates))throw Error('Coordenadas no válidas');
-  this.seed=String(seed);this.seedNumber=seedHash(seed);this.day=1;this.year=1;this.season=0;this.resources={wood:160,stone:90,food:220,firewood:75};this.health=100;this.happiness=85;this.speed=1;this.lastSpeed=1;this.nextId=1;this.buildings=[];this.citizens=[];this.events=[];this.gatherQueue=[];this.milestones=[];this.history=[];this.starveDays=0;this.coldDays=0;this.gameOver=false;this.won=false;this.totalDays=0;this.tiles=[];this.production={wood:0,stone:0,food:0,firewood:0};this.generate();
+  this.terrainVersion=restored?(restored.terrainVersion===1?1:3):3;this.coordinates=this.terrainVersion===3?(restored?restored.coordinates:coordinates):{x:0,y:0};
+  if(this.terrainVersion===3&&!validCoordinates(this.coordinates))throw Error('Coordenadas no válidas');
+  this.seed=String(seed);this.seedNumber=seedHash(seed);this.day=1;this.year=1;this.season=0;this.resources={wood:160,stone:90,food:220,firewood:75};this.health=100;this.happiness=85;this.speed=1;this.lastSpeed=1;this.nextId=1;this.buildings=[];this.citizens=[];this.events=[];this.gatherQueue=[];this.milestones=[];this.history=[];this.starveDays=0;this.coldDays=0;this.gameOver=false;this.won=false;this.totalDays=0;this.tiles=[];this.viewRegion={x:0,y:0};this.buildingCells=new Map();this.production={wood:0,stone:0,food:0,firewood:0};this.generate();
   if(restored){this.restore(restored);return;}
   this.addInitial('hall',29,29);this.addInitial('warehouse',32,29);this.addInitial('house',28,34);this.addInitial('house',32,34);
-  for(let x=26;x<=36;x++)this.tile(x,33).road=true;
-  for(let y=28;y<=38;y++)this.tile(31,y).road=true;
+  for(let x=26;x<=36;x++){const t=this.tile(x,33);t.road=true;this.rememberTile(t);}
+  for(let y=28;y<=38;y++){const t=this.tile(31,y);t.road=true;this.rememberTile(t);}
   for(let i=0;i<8;i++)this.addCitizen();
   this.log('Ocho colonos han llegado al valle. Su futuro está en tus manos.','welcome');
   this.log('Empieza con un campo de cultivo y una cabaña recolectora.','info');this.assignJobs();
  }
  generate(){
-  if(this.terrainVersion===2){this.generateProcedural();return;}
+  if(this.terrainVersion===3){this.chunks=new ChunkStore((x,y)=>this.proceduralTile(x,y));this.setViewRegion(0,0,true);return;}
   for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
   const noise=smooth(x/9,y/9,this.seedNumber),r=hash(x,y,this.seedNumber),center=44+Math.sin(y/7+this.seedNumber%6)*2.4+Math.cos(y/15)*2,river=Math.abs(x-center),lake=((x-46)/6)**2+((y-49)/7)**2;
   const water=river<1.8||lake<1,hill=(noise>.59&&x<23&&y<26)||(x<10&&y<14&&noise>.4),clear=Math.hypot(x-31,y-33)<8;
   this.tiles.push({x,y,type:water?'water':hill?'hill':'grass',height:water?0:hill?7+Math.floor(noise*16):Math.floor(noise*3),variant:r,tree:!water&&!hill&&!clear&&r>(noise>.4?.35:.72),rock:!water&&!clear&&(hill?r>.45:r>.96),road:false,bridge:false,building:null,marked:false});
  }}
- generateProcedural(){
-  for(let y=0;y<REGION_SIZE;y++)for(let x=0;x<REGION_SIZE;x++){
-   const ground=terrainSample(x+.5,y+.5,this.seedNumber,this.coordinates);
-   const gx=this.coordinates.x*REGION_SIZE+x,gy=this.coordinates.y*REGION_SIZE+y;
-   const r=hash(gx,gy,this.seedNumber),clear=Math.hypot(x-31.5,y-32.5)<9.5;
-   const type=ground.water?'water':ground.hill?'hill':'grass';
-   const density=(.17+ground.moisture*.64)*(ground.height>1.5?.55:1);
-   this.tiles.push({x,y,type,height:ground.water?0:ground.hill?7+Math.floor(ground.height*2):Math.max(0,Math.floor(ground.height*1.3)),variant:r,tree:type==='grass'&&!clear&&r<density,rock:!ground.water&&!clear&&(ground.hill?r>.35:r>.97),road:false,bridge:false,building:null,marked:false});
-  }
+ // Las casillas usan coordenadas globales; solo el primer asentamiento tiene un claro inicial.
+ proceduralTile(x,y){
+  const ground=terrainSample(x+.5,y+.5,this.seedNumber,this.coordinates);
+  const gx=this.coordinates.x*REGION_SIZE+x,gy=this.coordinates.y*REGION_SIZE+y;
+  const r=hash(gx,gy,this.seedNumber),clear=Math.hypot(x-31.5,y-32.5)<9.5;
+  const type=ground.water?'water':ground.hill?'hill':'grass';
+  const density=(.17+ground.moisture*.64)*(ground.height>1.5?.55:1);
+  return {x,y,type,height:ground.water?0:ground.hill?7+Math.floor(ground.height*2):Math.max(0,Math.floor(ground.height*1.3)),variant:r,tree:type==='grass'&&!clear&&r<density,rock:!ground.water&&!clear&&(ground.hill?r>.35:r>.97),road:false,bridge:false,building:this.buildingCells.get(x+','+y)||null,marked:false};
  }
- tile(x,y){x=Math.floor(x);y=Math.floor(y);return x>=0&&y>=0&&x<SIZE&&y<SIZE?this.tiles[y*SIZE+x]:null;}
+ setViewRegion(x,y,force=false){
+  if(this.terrainVersion!==3)return false;
+  if(!force&&x===this.viewRegion.x&&y===this.viewRegion.y)return false;
+  const tiles=this.chunks.setRegion(x,y);if(!tiles)return false;
+  this.tiles=tiles;this.viewRegion={x,y};return true;
+ }
+ rememberTile(t){if(this.terrainVersion===3)this.chunks.remember(t);}
+ get loadedChunks(){return this.terrainVersion===3?this.chunks.chunkCount:1;}
+ tile(x,y){
+  x=Math.floor(x);y=Math.floor(y);
+  if(this.terrainVersion===3)return this.chunks.tile(x,y);
+  return x>=0&&y>=0&&x<SIZE&&y<SIZE?this.tiles[y*SIZE+x]:null;
+ }
  addInitial(type,x,y){const d=BUILDINGS[type],b={id:this.nextId++,type,x,y,w:d.w,h:d.h,progress:1,workers:0,paused:false};this.buildings.push(b);this.occupy(b);return b;}
- occupy(b){for(let dy=0;dy<b.h;dy++)for(let dx=0;dx<b.w;dx++){let t=this.tile(b.x+dx,b.y+dy);if(t){t.building=b.id;t.tree=false;t.rock=false;t.road=false;t.marked=false;}}}
+ occupy(b){for(let dy=0;dy<b.h;dy++)for(let dx=0;dx<b.w;dx++){let t=this.tile(b.x+dx,b.y+dy);if(t){t.building=b.id;if(this.terrainVersion===3)this.buildingCells.set(t.x+','+t.y,b.id);t.tree=false;t.rock=false;t.road=false;t.marked=false;this.rememberTile(t);}}}
  get population(){return this.citizens.length;}
  get capacity(){return this.buildings.filter(b=>b.type==='house'&&b.progress>=1).length*4;}
  get storage(){return 500+this.buildings.filter(b=>b.type==='warehouse'&&b.progress>=1).length*500;}
@@ -81,13 +93,13 @@ export class World{
   return {ok:true,reason:d.days?'Clic para construir · Esc para cancelar':'Mantén pulsado para trazar'};
  }
  place(type,x,y){const result=this.canPlace(type,x,y);if(!result.ok)return result;const d=BUILDINGS[type];for(const [r,n]of Object.entries(d.cost))this.resources[r]-=n;
-  if(type==='road'||type==='bridge'){const t=this.tile(x,y);t[type]=true;t.tree=false;t.rock=false;return {ok:true};}
+  if(type==='road'||type==='bridge'){const t=this.tile(x,y);t[type]=true;t.tree=false;t.rock=false;this.rememberTile(t);return {ok:true};}
   const b={id:this.nextId++,type,x,y,w:d.w,h:d.h,progress:0,workers:0,paused:false};this.buildings.push(b);this.occupy(b);this.log(`Comienza la construcción: ${d.name.toLowerCase()}.`);return {ok:true,building:b};
  }
  previewLine(type,start,end){return planLine(this,type,start,end);}
- placeLine(type,start,end){const plan=this.previewLine(type,start,end);if(!plan.ok)return plan;if(this.gameOver)return {...plan,ok:false,reason:'La partida ha terminado.'};for(const [key,n]of Object.entries(plan.cost))this.resources[key]-=n;const cleared=new Set();for(const p of plan.cells){if(!p.action)continue;const t=this.tile(p.x,p.y);t[p.action]=true;if(type==='bridge'){t.bridgeAxis=plan.axis;t.road=false;}t.tree=false;t.rock=false;t.marked=false;cleared.add(p.y*SIZE+p.x);}this.gatherQueue=this.gatherQueue.filter(q=>!cleared.has(q.y*SIZE+q.x));if(plan.count)this.log(`${type==='road'?'Camino':'Puente'} completado: ${plan.count} tramos.`, 'success');return plan;}
- markGather(x,y){const t=this.tile(x,y);if(!t||(!t.tree&&!t.rock))return {ok:false,reason:'Selecciona un árbol o una roca.'};if(t.marked)return {ok:false,reason:'Ya está marcado para recoger.'};t.marked=true;this.gatherQueue.push({x:t.x,y:t.y,progress:0});return {ok:true};}
- demolish(id){const b=this.buildings.find(b=>b.id===id);if(!b||b.type==='hall')return false;const d=BUILDINGS[b.type];for(const [r,n]of Object.entries(d.cost))this.resources[r]=Math.min(this.storage,this.resources[r]+Math.floor(n*.5));for(const t of this.tiles)if(t.building===id)t.building=null;this.buildings=this.buildings.filter(v=>v.id!==id);this.assignJobs();this.log(`${d.name}: recuperado el 50 % de los materiales.`);return true;}
+ placeLine(type,start,end){const plan=this.previewLine(type,start,end);if(!plan.ok)return plan;if(this.gameOver)return {...plan,ok:false,reason:'La partida ha terminado.'};for(const [key,n]of Object.entries(plan.cost))this.resources[key]-=n;const cleared=new Set();for(const p of plan.cells){if(!p.action)continue;const t=this.tile(p.x,p.y);t[p.action]=true;if(type==='bridge'){t.bridgeAxis=plan.axis;t.road=false;}t.tree=false;t.rock=false;t.marked=false;cleared.add(p.x+','+p.y);this.rememberTile(t);}this.gatherQueue=this.gatherQueue.filter(q=>!cleared.has(q.x+','+q.y));if(plan.count)this.log(`${type==='road'?'Camino':'Puente'} completado: ${plan.count} tramos.`, 'success');return plan;}
+ markGather(x,y){const t=this.tile(x,y);if(!t||(!t.tree&&!t.rock))return {ok:false,reason:'Selecciona un árbol o una roca.'};if(t.marked)return {ok:false,reason:'Ya está marcado para recoger.'};t.marked=true;this.rememberTile(t);this.gatherQueue.push({x:t.x,y:t.y,progress:0});return {ok:true};}
+ demolish(id){const b=this.buildings.find(b=>b.id===id);if(!b||b.type==='hall')return false;const d=BUILDINGS[b.type];for(const [r,n]of Object.entries(d.cost))this.resources[r]=Math.min(this.storage,this.resources[r]+Math.floor(n*.5));for(let dy=0;dy<b.h;dy++)for(let dx=0;dx<b.w;dx++){const t=this.tile(b.x+dx,b.y+dy);if(t){t.building=null;if(this.terrainVersion===3)this.buildingCells.delete(t.x+','+t.y);this.rememberTile(t);}}this.buildings=this.buildings.filter(v=>v.id!==id);this.assignJobs();this.log(`${d.name}: recuperado el 50 % de los materiales.`);return true;}
  addCitizen(){const i=this.nextId++;this.citizens.push({id:i,name:NAMES[(i-6)%NAMES.length]||'Colono',age:18+Math.floor(hash(i,3,this.seedNumber)*32),x:30.5+hash(i,1),y:32+hash(i,2),job:null,path:[],wait:0,color:['#c3a76d','#9cab98','#ad7361','#d0bd94','#8cabb5','#9e909f'][i%6]});}
  assignJobs(){let free=this.citizens.slice();for(const c of free)c.job=null;for(const b of this.buildings){if(b.progress<1)b.workers=0;const want=Math.min(b.workers,free.length,BUILDINGS[b.type].maxWorkers);b.workers=want;for(let n=0;n<want;n++)free.shift().job=b.id;}}
  changeWorkers(id,amount){const b=this.buildings.find(v=>v.id===id);if(!b||b.progress<1)return false;const cap=BUILDINGS[b.type].maxWorkers;if(amount>0&&(this.idle<=0||b.workers>=cap))return false;if(amount<0&&b.workers<=0)return false;b.workers=Math.max(0,Math.min(cap,b.workers+amount));this.assignJobs();return true;}
@@ -96,14 +108,14 @@ export class World{
   const before={...this.resources};
   const unfinished=this.buildings.filter(b=>b.progress<1),builders=this.builders;
   if(unfinished.length&&builders>0){let effort=builders/2;for(const b of unfinished){const d=BUILDINGS[b.type],needed=(1-b.progress)*d.days,use=Math.min(effort,needed);b.progress=Math.min(1,b.progress+use/d.days);effort-=use;if(b.progress>=.99999){b.progress=1;b.workers=Math.min(d.maxWorkers,Math.max(0,this.idle-1));this.assignJobs();this.log(`${d.name}: construcción terminada.`,'success');}if(effort<=0)break;}}
-  if(builders>0&&this.gatherQueue.length){const q=this.gatherQueue[0];q.progress+=builders*.5;if(q.progress>=1){const t=this.tile(q.x,q.y);if(t?.tree){this.resources.wood+=12;t.tree=false;}if(t?.rock){this.resources.stone+=10;t.rock=false;}if(t)t.marked=false;this.gatherQueue.shift();}}
+  if(builders>0&&this.gatherQueue.length){const q=this.gatherQueue[0];q.progress+=builders*.5;if(q.progress>=1){const t=this.tile(q.x,q.y);if(t?.tree){this.resources.wood+=12;t.tree=false;}if(t?.rock){this.resources.stone+=10;t.rock=false;}if(t){t.marked=false;this.rememberTile(t);}this.gatherQueue.shift();}}
   for(const b of this.buildings){if(b.progress<1||b.paused||!b.workers)continue;const w=b.workers;
    if(b.type==='farm')this.resources.food+=[2,3,4,0][this.season]*w;
    if(b.type==='gatherer')this.resources.food+=3*w*this.forestAt(b)*(this.season===3?.6:1);
    if(b.type==='fisher')this.resources.food+=2.6*w;
    if(b.type==='pasture')this.resources.food+=2.4*w;
    if(b.type==='quarry')this.resources.stone+=2*w;
-   if(b.type==='forester'){this.resources.wood+=3*w*this.forestAt(b,8);if(this.totalDays%3===0){for(let tries=0;tries<12;tries++){let x=b.x+Math.floor(hash(this.totalDays+tries,1,this.seedNumber)*16)-8,y=b.y+Math.floor(hash(1,this.totalDays+tries,this.seedNumber)*16)-8,t=this.tile(x,y);if(t&&t.type==='grass'&&!t.building&&!t.road&&!t.rock&&!t.tree){t.tree=true;break;}}}}
+   if(b.type==='forester'){this.resources.wood+=3*w*this.forestAt(b,8);if(this.totalDays%3===0){for(let tries=0;tries<12;tries++){let x=b.x+Math.floor(hash(this.totalDays+tries,1,this.seedNumber)*16)-8,y=b.y+Math.floor(hash(1,this.totalDays+tries,this.seedNumber)*16)-8,t=this.tile(x,y);if(t&&t.type==='grass'&&!t.building&&!t.road&&!t.rock&&!t.tree){t.tree=true;this.rememberTile(t);break;}}}}
    if(b.type==='woodcutter'){const input=Math.min(this.resources.wood,2*w);this.resources.wood-=input;this.resources.firewood+=input*2.5;}
   }
   const foodNeed=this.population*.45,heatNeed=this.population*(this.season===3?.2:.025);
@@ -128,9 +140,17 @@ export class World{
   else if(this.capacity<=this.population)this.log('No hay viviendas libres para recibir nuevos colonos.');
  }
  passable(x,y){const t=this.tile(x,y);return !!t&&(t.type==='grass'||t.bridge)&&!t.building;}
- findPath(sx,sy,tx,ty){sx=Math.floor(sx);sy=Math.floor(sy);tx=Math.floor(tx);ty=Math.floor(ty);if(!this.passable(tx,ty))return [];const start=sy*SIZE+sx,target=ty*SIZE+tx,queue=[start],prev=new Map([[start,-1]]);let found=false;
-  for(let i=0;i<queue.length&&i<1800;i++){const k=queue[i];if(k===target){found=true;break;}const x=k%SIZE,y=Math.floor(k/SIZE);for(const [dx,dy]of [[0,1],[1,0],[0,-1],[-1,0]]){const xx=x+dx,yy=y+dy,n=yy*SIZE+xx;if(!prev.has(n)&&this.passable(xx,yy)){prev.set(n,k);queue.push(n);}}}
-  if(!found)return [];const path=[];let k=target;while(k!==start){path.push({x:k%SIZE+.5,y:Math.floor(k/SIZE)+.5});k=prev.get(k);}return path.reverse();
+ findPath(sx,sy,tx,ty){
+  sx=Math.floor(sx);sy=Math.floor(sy);tx=Math.floor(tx);ty=Math.floor(ty);
+  if(!this.passable(tx,ty)||Math.abs(sx-tx)+Math.abs(sy-ty)>90)return [];
+  const key=(x,y)=>x+','+y,start=key(sx,sy),goal=key(tx,ty),queue=[[sx,sy]],prev=new Map([[start,null]]);
+  let found=false;
+  for(let i=0;i<queue.length&&i<1800;i++){
+   const [x,y]=queue[i],k=key(x,y);if(k===goal){found=true;break;}
+   for(const [dx,dy]of [[0,1],[1,0],[0,-1],[-1,0]]){const xx=x+dx,yy=y+dy,n=key(xx,yy);if(!prev.has(n)&&this.passable(xx,yy)){prev.set(n,k);queue.push([xx,yy]);}}
+  }
+  if(!found)return [];const path=[];let k=goal;
+  while(k!==start){const [x,y]=k.split(',').map(Number);path.push({x:x+.5,y:y+.5});k=prev.get(k);}return path.reverse();
  }
  animate(dt,time){if(!this.speed||this.gameOver)return;for(const c of this.citizens){if(!this.passable(c.x,c.y)){for(let r=1;r<5;r++){let done=false;for(const [dx,dy]of [[r,0],[-r,0],[0,r],[0,-r]])if(this.passable(Math.floor(c.x)+dx,Math.floor(c.y)+dy)){c.x=Math.floor(c.x)+dx+.5;c.y=Math.floor(c.y)+dy+.5;c.path=[];done=true;break;}if(done)break;}}
    if(c.path.length){const t=c.path[0],dx=t.x-c.x,dy=t.y-c.y,dist=Math.hypot(dx,dy),step=dt*Math.min(this.speed,3)*1.25*(this.tile(c.x,c.y)?.road?1.5:1);if(dist<=step){c.x=t.x;c.y=t.y;c.path.shift();c.wait=1+hash(c.id,this.totalDays)*3;}else{c.x+=dx/dist*step;c.y+=dy/dist*step;}continue;}
