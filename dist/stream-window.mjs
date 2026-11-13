@@ -15,7 +15,7 @@ export const CHUNK_WIDTH=64;
 export function renderDistanceForZoom(zoom){
  if(!Number.isFinite(zoom)||zoom<=0)return FADE_OUT_DISTANCE;
  const transition=FADE_OUT_DISTANCE-FULL_DETAIL_DISTANCE;
- return Math.min(FADE_OUT_DISTANCE,Math.max(192,CAMERA_DISTANCE/zoom*3.5+transition));
+ return Math.min(FADE_OUT_DISTANCE,Math.max(192,CAMERA_DISTANCE/zoom*2.5+transition));
 }
 export const id=(x,y)=>x+','+y;
 const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
