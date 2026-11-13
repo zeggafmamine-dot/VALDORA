@@ -15,7 +15,7 @@ export function installDetailedMaterials(m,ready=()=>{}){
     diffuseColor*=detailTexel;
    #endif`);
    let bump=T.ShaderChunk.bumpmap_pars_fragment;for(const uv of ['vBumpMapUv + dSTdx','vBumpMapUv + dSTdy','vBumpMapUv'])bump=bump.replace(`texture2D( bumpMap, ${uv} ).x`,`mix(texture2D(bumpMap, ${uv}).x,texture2D(uSurfaceAtlas,uSurfaceOffset+vec2(.003)+fract(${uv})*.494).x,uAtlasLoaded)`);shader.fragmentShader=shader.fragmentShader.replace('#include <bumpmap_pars_fragment>',bump);};material.customProgramCacheKey=()=>`valdora-surface-v3-${x}-${y}`;material.needsUpdate=true;}
- m.ground.onBeforeCompile=shader=>{shader.uniforms.uSurfaceAtlas=atlasState.texture;shader.uniforms.uAtlasLoaded=atlasState.loaded;shader.vertexShader='varying vec3 vTerrainWorld; varying vec3 vTerrainNormal;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvTerrainWorld=(modelMatrix*vec4(position,1.0)).xyz; vTerrainNormal=normalize(mat3(modelMatrix)*normal);');shader.fragmentShader='uniform sampler2D uSurfaceAtlas; uniform float uAtlasLoaded; varying vec3 vTerrainWorld; varying vec3 vTerrainNormal;\n'+shader.fragmentShader;
+ m.ground.onBeforeCompile=shader=>{shader.uniforms.uSurfaceAtlas=atlasState.texture;shader.uniforms.uAtlasLoaded=atlasState.loaded;shader.uniforms.uAlpineSurface={value:m.alpineTexture};shader.vertexShader='varying vec3 vTerrainWorld; varying vec3 vTerrainNormal;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvTerrainWorld=(modelMatrix*vec4(position,1.0)).xyz; vTerrainNormal=normalize(mat3(modelMatrix)*normal);');shader.fragmentShader='uniform sampler2D uSurfaceAtlas; uniform sampler2D uAlpineSurface; uniform float uAtlasLoaded; varying vec3 vTerrainWorld; varying vec3 vTerrainNormal;\n'+shader.fragmentShader;
   shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',`#ifdef USE_MAP
    vec2 groundUv=vTerrainWorld.xz*.38;
    vec3 meadow=texture2D(uSurfaceAtlas,vec2(.503,.003)+fract(groundUv)*.494).rgb*3.6;
@@ -24,8 +24,19 @@ export function installDetailedMaterials(m,ready=()=>{}){
    float steep=smoothstep(.09,.36,1.-abs(normalize(vTerrainNormal).y))*smoothstep(1.,3.,vTerrainWorld.y);
    vec3 detailedGround=mix(mix(meadow,meadow2,.3),stone,steep);
    vec3 originalGround=texture2D(map,vMapUv).rgb;
-   diffuseColor.rgb*=mix(originalGround,detailedGround,uAtlasLoaded);
-  #endif`);};m.ground.customProgramCacheKey=()=> 'valdora-terrain-v3';m.ground.needsUpdate=true;
+   vec3 surface=mix(originalGround,detailedGround,uAtlasLoaded);
+   // Por encima del límite protegido, sustituir la hierba por la textura
+   // glacial independiente. La transición suave evita un corte visual.
+   float highAltitude=smoothstep(13.45,14.45,vTerrainWorld.y);
+   if(highAltitude>.001){
+    vec3 alpine=texture2D(uAlpineSurface,vTerrainWorld.xz*.12).rgb*1.55;
+    float slope=1.-abs(normalize(vTerrainNormal).y);
+    float snow=smoothstep(14.,23.,vTerrainWorld.y)*(1.-smoothstep(.10,.5,slope));
+    alpine=mix(alpine,vec3(.95,.98,.98),snow*.45);
+    surface=mix(surface,alpine,highAltitude);
+   }
+   diffuseColor.rgb*=surface;
+  #endif`);};m.ground.customProgramCacheKey=()=> 'valdora-terrain-v4-alpine';m.ground.needsUpdate=true;
  for(const material of [m.needles,m.leaves,m.grass,m.bush]){material.onBeforeCompile=shader=>{shader.uniforms.uWindTime=wind;shader.vertexShader='uniform float uWindTime;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
    vec3 windOrigin=vec3(0.);
    #ifdef USE_INSTANCING
