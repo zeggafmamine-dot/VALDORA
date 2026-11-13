@@ -8,7 +8,7 @@ test('world streams positive and negative regions without keeping all visited te
  const world=new World('INFINITO',null,{x:3,y:-7});
  const original=snapshot(world.tile(-17,141));
  for(let i=-90;i<90;i++)world.setViewRegion(i,Math.floor(i/2));
- assert.ok(world.loadedChunks<=24,'Se ha superado la caché acotada');
+ assert.ok(world.loadedChunks<=20,'Se ha superado la caché acotada');
  world.setViewRegion(-1,2);
  assert.deepEqual(snapshot(world.tile(-17,141)),original);
  assert.equal(world.tiles.length,SIZE*SIZE);
@@ -37,7 +37,7 @@ test('modified roads and gathered resources survive eviction, saves, and load',(
  const restored=new World(saved.seed,saved);
  assert.equal(restored.tile(-37,141).road,true);
  assert.equal(restored.tile(133,141).tree,false);
- assert.ok(restored.loadedChunks<=24);
+ assert.ok(restored.loadedChunks<=20);
 });
 test('remote construction persists and has correct collision after streaming',()=>{
  const w=new World('CONSTRUCCION');let pos=null;
@@ -59,5 +59,5 @@ test('camera region in a save is restored without retaining explored terrain',()
  const restored=new World(w.seed,JSON.parse(JSON.stringify(w.serialize())));
  assert.deepEqual(restored.viewRegion,{x:-4,y:3});
  assert.deepEqual(restored.cameraPosition,{x:-222.4,y:201.2});
- assert.ok(restored.loadedChunks<=24);
+ assert.ok(restored.loadedChunks<=20);
 });
