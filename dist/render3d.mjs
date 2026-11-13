@@ -418,7 +418,7 @@ export class Renderer{
   }else{
    if(q==='high'&&!this.grassInst)this.createGrassInstances();
    if(this.grassInst)this.grassInst.visible=q==='high';
-  }if(this.post)this.post.uniforms.uAO.value=q==='low'?0:q==='high'?1:.65;this.river.quality=q;this.resize();this.gl.shadowMap.needsUpdate=true;}
+  }if(this.post)this.post.uniforms.uAO.value=q==='low'?0:q==='high'?1:.65;this.river.quality=q;this.water.material.uniforms.uLow.value=q==='low'?1:0;this.resize();this.gl.shadowMap.needsUpdate=true;}
  draw(time){
   if(this.contextLost)return;this.time=time;
   if(this.lastSeason!==this.world.season)this.updateSeason();
