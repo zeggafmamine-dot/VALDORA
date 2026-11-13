@@ -81,7 +81,42 @@ export class Renderer{
   }
   this.grassInst.instanceMatrix.needsUpdate=true;
  }
- refreshTrees(){if((this.world.renderTiles||this.world.tiles).some(t=>t.tree&&!this.knownTrees.has(t)))this.createTreeMeshes();const pal=seasonColors[this.world.season];for(const inst of this.treeInstances){const {tiles,variant,foliage}=inst.userData;for(let i=0;i<tiles.length;i++){const t=tiles[i],r=hash(t.x,t.y,this.world.seedNumber+65),x=t.x+.25+r*.5,z=t.y+.25+hash(t.y,t.x)*.5,size=.62+r*.5;this.dummy.position.set(x,this.heightAt(x,z),z);this.dummy.rotation.set(0,r*Math.PI*2,0);this.dummy.scale.set(size*(t.tree?1:0),size*(.9+hash(t.x,t.y)*.2)*(t.tree?1:0),size*(t.tree?1:0));this.dummy.updateMatrix();inst.setMatrixAt(i,this.dummy.matrix);const color=new T.Color(foliage?(variant===2?pal.oak:pal.pine):'#d8cfb9');color.multiplyScalar(.78+r*.3);if(t.marked)color.lerp(new T.Color('#d7b261'),.4);inst.setColorAt(i,color);}inst.instanceMatrix.needsUpdate=true;if(inst.instanceColor)inst.instanceColor.needsUpdate=true;inst.computeBoundingSphere();}this.gl.shadowMap.needsUpdate=true;}
+ refreshTrees(){
+  if((this.world.renderTiles||this.world.tiles).some(t=>t.tree&&!this.knownTrees.has(t)))this.createTreeMeshes();
+  const pal=seasonColors[this.world.season];
+  const sourceMatrices=new Map(),color=new T.Color(),marked=new T.Color('#d7b261');
+  const bark=new T.Color('#d8cfb9'),pine=new T.Color(pal.pine),oak=new T.Color(pal.oak);
+  for(const inst of this.treeInstances){
+   const {tiles,variant,foliage}=inst.userData;
+   const previous=sourceMatrices.get(tiles);
+   if(previous){
+    // Tronco, ramas y hojas comparten la misma transformación. Antes se
+    // calculaba heightAt() otra vez por cada pieza del mismo árbol.
+    inst.instanceMatrix.array.set(previous.instanceMatrix.array);
+   }else{
+    for(let i=0;i<tiles.length;i++){
+     const t=tiles[i],r=hash(t.x,t.y,this.world.seedNumber+65);
+     const x=t.x+.25+r*.5,z=t.y+.25+hash(t.y,t.x)*.5,size=.62+r*.5;
+     this.dummy.position.set(x,this.heightAt(x,z),z);
+     this.dummy.rotation.set(0,r*Math.PI*2,0);
+     this.dummy.scale.set(size*(t.tree?1:0),size*(.9+hash(t.x,t.y)*.2)*(t.tree?1:0),size*(t.tree?1:0));
+     this.dummy.updateMatrix();inst.setMatrixAt(i,this.dummy.matrix);
+    }
+    sourceMatrices.set(tiles,inst);
+   }
+   const base=foliage?(variant===2?oak:pine):bark;
+   for(let i=0;i<tiles.length;i++){
+    const t=tiles[i],r=hash(t.x,t.y,this.world.seedNumber+65);
+    color.copy(base).multiplyScalar(.78+r*.3);
+    if(t.marked)color.lerp(marked,.4);
+    inst.setColorAt(i,color);
+   }
+   inst.instanceMatrix.needsUpdate=true;
+   if(inst.instanceColor)inst.instanceColor.needsUpdate=true;
+   inst.computeBoundingSphere();
+  }
+  this.gl.shadowMap.needsUpdate=true;
+ }
  makeRocks(){const tiles=(this.world.renderTiles||this.world.tiles).filter(t=>t.rock||t.stoneScar);const geom=new T.DodecahedronGeometry(1,1),p=geom.getAttribute('position');for(let i=0;i<p.count;i++){const r=hash(Math.round(p.getX(i)*10),Math.round(p.getY(i)*10),75);p.setXYZ(i,p.getX(i)*(.85+r*.3),p.getY(i)*(.7+r*.5),p.getZ(i)*(.85+r*.3));}geom.computeVertexNormals();this.rockTiles=tiles;this.rockInstances=new T.InstancedMesh(geom,this.materials.rock,Math.max(1,tiles.length));this.rockInstances.castShadow=this.rockInstances.receiveShadow=true;this.staticGroup.add(this.rockInstances);
   const scarGeo=new T.PlaneGeometry(1,1);scarGeo.rotateX(-Math.PI/2);
   this.rockScarInstances=new T.InstancedMesh(scarGeo,this.materials.dirt,Math.max(1,tiles.length));
