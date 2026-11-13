@@ -1,0 +1,20 @@
+name: Valdora CI
+on:
+  push:
+    branches: [main, feature/infinite-world-streaming]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxis
+        run: |
+          for file in dist/*.mjs tests/*.test.mjs; do node --check "$file"; done
+      - name: Simulacion y terreno
+        run: node --test tests/*.test.mjs

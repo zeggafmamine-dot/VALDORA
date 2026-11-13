@@ -11,10 +11,10 @@ test('a seed reproduces the terrain and different seeds vary it',()=>{
  }
 });
 
-test('placement validates occupied terrain, map edges, water and materials',()=>{
+test('placement validates occupied terrain, water and materials',()=>{
  const w=new World();const starting={...w.resources};
  assert.equal(w.place('house',29,29).ok,false);assert.deepEqual(w.resources,starting);
- assert.equal(w.place('house',SIZE-1,5).ok,false);
+ assert.ok(w.tile(SIZE,5));assert.ok(w.tile(-1,5)); // El mundo continúa fuera de la primera región.
  const t=w.tiles.find(t=>t.type==='water');assert.equal(w.place('house',t.x,t.y).ok,false);
  assert.equal(w.place('bridge',t.x,t.y).ok,true);assert.equal(w.resources.wood,starting.wood-6);assert.equal(w.passable(t.x,t.y),true);
  assert.equal(w.place('bridge',t.x,t.y).ok,false);assert.equal(w.place('bridge',31,33).ok,false);
@@ -61,7 +61,7 @@ test('farm output stops in winter and starvation can end the game',()=>{
 
 test('malformed save files are rejected before being installed',()=>{
  const s=new World().serialize();
- for(const bad of [{...s,day:NaN},{...s,resources:{}},{...s,buildings:[{...s.buildings[0],x:-3}]},{...s,events:[{text:'hello',date:'now',type:'invalid'}]}])assert.throws(()=>new World(s.seed,bad));
+ for(const bad of [{...s,day:NaN},{...s,resources:{}},{...s,buildings:[{...s.buildings[0],x:100000001}]},{...s,events:[{text:'hello',date:'now',type:'invalid'}]}])assert.throws(()=>new World(s.seed,bad));
 });
 
 test('paths cross completed bridges and avoid water',()=>{
@@ -89,14 +89,17 @@ test('new procedural saves retain coordinates and older saves remain compatible'
  const snapshot=JSON.parse(JSON.stringify(original.serialize()));
  const restored=new World(snapshot.seed,snapshot);
  assert.deepEqual(restored.coordinates,{x:-11,y:48});
- assert.equal(restored.terrainVersion,2);
+ assert.equal(restored.terrainVersion,3);assert.equal(snapshot.version,2);assert.ok(snapshot.tileChanges.length<200);
  assert.deepEqual(restored.tiles.map(t=>t.type),original.tiles.map(t=>t.type));
  assert.equal(restored.speed,0);
- const old={...snapshot};delete old.terrainVersion;delete old.coordinates;
- const legacy=new World(old.seed,old);
- assert.equal(legacy.terrainVersion,1);
- assert.deepEqual(legacy.coordinates,{x:0,y:0});
- assert.equal(legacy.tiles.length,SIZE*SIZE);
+ const previous={...snapshot,version:1,terrainVersion:2,tiles:original.tiles.map(t=>({tree:t.tree,rock:t.rock,road:t.road,bridge:t.bridge,bridgeAxis:t.bridgeAxis,marked:t.marked}))};
+ delete previous.tileChanges;
+ const migrated=new World(previous.seed,previous);
+ assert.equal(migrated.terrainVersion,3);assert.deepEqual(migrated.coordinates,original.coordinates);
+ assert.equal(migrated.tile(31,33).road,original.tile(31,33).road);
+ const classic={...previous};delete classic.terrainVersion;delete classic.coordinates;
+ const legacy=new World(classic.seed,classic);
+ assert.equal(legacy.terrainVersion,1);assert.deepEqual(legacy.coordinates,{x:0,y:0});assert.equal(legacy.tiles.length,SIZE*SIZE);
 });
 
 test('invalid world coordinates are rejected instead of silently corrupting terrain',()=>{

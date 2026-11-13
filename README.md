@@ -19,9 +19,9 @@ Funda una aldea con ocho habitantes. Construye un campo y una cabaña recolector
 - B: casa. F: campo. WASD o flechas: mover la cámara.
 - En móvil, botón Construir y gestos de arrastre.
 
-Cada región jugable tiene 64 × 64 casillas. El generador procedural crea relieve, montañas, bosques y agua a partir de una semilla y coordenadas globales X/Y (cada paso de coordenada desplaza una región completa). La misma combinación de semilla y coordenadas reproduce el mismo mapa. En «Nuevo valle» puedes escoger X/Y y consultar una vista previa antes de fundar tu aldea; los guardados antiguos se cargan con su terreno original. No existe desplazamiento entre regiones durante una misma partida. Cada estación tiene 30 días. Un día equivale a 2,5 segundos de simulación a velocidad 1×. El juego incluye edificios con trabajadores, costes, construcción, cultivos estacionales, recolección, pesca, pastos, recursos forestales, cantera, viviendas, almacenes, pozo, mercado, caminos y puentes. Los aldeanos tienen rutas visuales; la producción se calcula diariamente por edificio, sin simular cadenas individuales de transporte.
+El mundo procedural ahora es **continuo durante la partida**: el generador determina cada casilla por semilla y coordenadas globales, y puedes recorrerlo en cualquier dirección sin una frontera de 64 × 64. Cada región lógica mide 64 × 64 casillas, pero el renderizador dibuja también una franja de transición para evitar cortes visibles. Los sectores de generación miden 16 × 16 casillas, la caché conserva un máximo de **80 sectores** (20.480 casillas) y descarta automáticamente los lejanos. Las zonas no visitadas no ocupan memoria. Los edificios, caminos, puentes y recursos modificados se registran por coordenada y reaparecen al volver, incluso después de guardar y cargar. Las mismas coordenadas y semilla producen siempre el mismo terreno. En «Nuevo valle» escoges solo el punto inicial; para explorar durante la partida usa WASD, arrastre, o el minimapa. La tecla C vuelve a la aldea original. El modo de terreno clásico (guardados muy antiguos sin versión) se mantiene sin streaming para no modificar su geografía. Cada estación tiene 30 días. Un día equivale a 2,5 segundos de simulación a velocidad 1×. El juego incluye edificios con trabajadores, costes, construcción, cultivos estacionales, recolección, pesca, pastos, recursos forestales, cantera, viviendas, almacenes, pozo, mercado, caminos y puentes. Los aldeanos tienen rutas visuales; la producción se calcula diariamente por edificio, sin simular cadenas individuales de transporte.
 
-El guardado automático utiliza localStorage y ocurre cada 20 segundos. El menú permite guardar, exportar e importar JSON, y empezar una partida con otra semilla. Al recuperar una partida, el tiempo comienza pausado. No hay progreso mientras el juego está cerrado.
+El guardado automático utiliza localStorage y ocurre cada 20 segundos. El terreno no modificado no se guarda: solo los cambios, los habitantes, los edificios y la posición de cámara. El espacio disponible en el navegador sigue siendo limitado; exporta una copia JSON periódicamente si expandes mucho tu asentamiento. El menú permite guardar, exportar e importar JSON, y empezar una partida con otra semilla. Al recuperar una partida, el tiempo comienza pausado. No hay progreso mientras el juego está cerrado.
 
 ## Archivos
 
@@ -29,6 +29,7 @@ El guardado automático utiliza localStorage y ocurre cada 20 segundos. El menú
 - `dist/style.css`: interfaz adaptable a pantalla.
 - `dist/sim.mjs`: simulación determinista, generación de terreno y guardado.
 - `dist/terrain.mjs`: muestreo continuo de relieve procedural en coordenadas globales X/Y.
+- `dist/chunks.mjs`: caché LRU de sectores y cambios persistentes del mundo infinito.
 - `dist/render3d.mjs`: terreno con relieve, cámara en perspectiva, agua animada, luces, sombras, follaje instanciado y selección con rayos.
 - `dist/models3d.mjs`: texturas, casas, árboles, aldeanos, ovejas y otros modelos.
 - `dist/vendor/`: Three.js r180 y su licencia MIT.
@@ -62,4 +63,8 @@ La vista 3D incorpora materiales con grano y relieve, buhardillas, porches, teja
 
 El atlas fue generado con ImageGen para este proyecto: cuatro cuadrantes de materiales planos y sin texto — tablones de roble envejecido, tejas de madera marrón, mampostería gris y suelo de pradera oliva. Se utiliza el archivo original, sin activos de Banished.
 
-Validación: 13 pruebas de simulación y trazado; creación de todos los modelos, geometría finita, cámara, rayos, estaciones y guardado; prueba de arrastre real en el navegador de un camino de seis tramos y un puente de seis tramos con el coste exacto. El navegador de QA no ofrece WebGL: se revisó visualmente la vista compatible; el resultado y rendimiento de los efectos WebGL requieren revisión en un equipo con aceleración gráfica.
+Validación histórica: 13 pruebas de simulación y trazado; creación de todos los modelos, geometría finita, cámara, rayos, estaciones y guardado; prueba de arrastre real en el navegador de un camino de seis tramos y un puente de seis tramos con el coste exacto. El navegador de QA no ofrece WebGL: se revisó visualmente la vista compatible; el resultado y rendimiento de los efectos WebGL requieren revisión en un equipo con aceleración gráfica.
+
+## Mundo infinito (noviembre 2026)
+
+El streaming y el guardado disperso están cubiertos por `tests/infinite.test.mjs`: continuidad del relieve, exploración de regiones negativas y lejanas, límite de caché, persistencia de carreteras, tala, edificios y cámara. Ejecuta `node --test tests/*.test.mjs`; GitHub Actions también comprueba la sintaxis y las pruebas. Las limitaciones prácticas son la precisión numérica del navegador y el espacio local disponible para modificaciones; no existe un mapa completo que debamos cargar o almacenar.
