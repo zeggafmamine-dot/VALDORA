@@ -145,7 +145,8 @@ export class Renderer{
   for(const chunk of [...this.chunkVisuals.values()])this.dropVisualChunk(chunk);
  }
  refreshVisualChunk(chunk){
-  if(this.visualSignature(chunk.tiles)!==chunk.signature){
+  const activeTiles=this.world.chunks.getChunk(chunk.cx,chunk.cy);
+  if(activeTiles!==chunk.tiles||this.visualSignature(chunk.tiles)!==chunk.signature){
    const {cx,cy,opacity}=chunk;
    this.dropVisualChunk(chunk);this.makeVisualChunk(cx,cy,opacity);
    return;
