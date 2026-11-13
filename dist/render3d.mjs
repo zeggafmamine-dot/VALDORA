@@ -1,7 +1,7 @@
 import * as T from './vendor/three.module.js';
 import {SIZE,BUILDINGS,hash} from './sim.mjs';
 import {terrainSample,REGION_SIZE} from './terrain.mjs';
-import {desiredChunks,visibilityTarget,approachOpacity,shouldRetire} from './stream-window.mjs';
+import {desiredChunks,visibilityTarget,approachOpacity,shouldRetire,chunkDistance,MAX_VISUAL_CHUNKS} from './stream-window.mjs';
 import {makeMaterials,buildingModel,treeModel,constructionModel,citizenModel,animalModel,cube,beam,mergeByMaterial} from './models3d.mjs';
 import {installDetailedMaterials,makeTransport,routePreview,createPostprocessing,makeSky,makeRiver} from './visuals.mjs';
 
@@ -176,6 +176,11 @@ export class Renderer{
    if(Math.abs(chunk.opacity-target)<.001)chunk.opacity=target;
    for(const material of chunk.fade.materials)material.opacity=chunk.opacity;
    if(target===0&&chunk.opacity<.003)this.dropVisualChunk(chunk);
+  }
+  // En desplazamientos extremadamente rápidos, la memoria gráfica sigue acotada.
+  if(this.chunkVisuals.size>MAX_VISUAL_CHUNKS){
+   const farthest=[...this.chunkVisuals.values()].sort((a,b)=>chunkDistance(b.cx,b.cy,this.camera.x,this.camera.y)-chunkDistance(a.cx,a.cy,this.camera.x,this.camera.y));
+   while(this.chunkVisuals.size>MAX_VISUAL_CHUNKS)this.dropVisualChunk(farthest.shift());
   }
  }
  streamRegion(){
