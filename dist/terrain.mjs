@@ -58,8 +58,9 @@ export function terrainSample(x,y,seed,coordinates){
  // Las laderas altas ya tienen textura mineral y no necesitan estar
  // cubiertas de miles de piedras instanciadas. Pocos afloramientos, incluso
  // en la montaña, y NINGÚN depósito aprovechable en la franja alpina.
- const rockDensity=water||height>=ALPINE_START_HEIGHT?0:Math.min(.073,
-  .012+.044*fade(2.8,11.5,height)+.012*fade(.67,.86,rockBand));
+ const rockDensity=water?0:Math.min(.073,
+  .012+.044*fade(2.8,11.5,height)+.012*fade(.67,.86,rockBand))*
+  (1-fade(10.8,ALPINE_START_HEIGHT,height));
  let biome;
  if(water)biome='water';
  else if(height>=ALPINE_START_HEIGHT)biome='alpine';
