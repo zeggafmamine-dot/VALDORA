@@ -1,10 +1,11 @@
 // Planificador puro para un horizonte móvil alrededor de la cámara.
-// Cada sector se conserva mientras es útil y su presencia cambia con la distancia.
-export const VISUAL_RADIUS=2;
-export const MAX_VISUAL_CHUNKS=36;
-export const RETIRE_RADIUS=3;
-export const FULL_DETAIL_DISTANCE=96;
-export const FADE_OUT_DISTANCE=170;
+// Horizonte tres veces mayor (170 → 510 unidades), sin ampliar los sectores de 64x64.
+// La banda de aparición permanece en 74 unidades, igual que en el mapa anterior.
+export const VISUAL_RADIUS=8;
+export const MAX_VISUAL_CHUNKS=300;
+export const RETIRE_RADIUS=9;
+export const FULL_DETAIL_DISTANCE=436;
+export const FADE_OUT_DISTANCE=510;
 export const FADE_SECONDS=.9;
 export const CHUNK_WIDTH=64;
 export const id=(x,y)=>x+','+y;
