@@ -3,9 +3,9 @@ import {hash} from './sim.mjs';
 import {cube,beam,mergeByMaterial} from './models3d.mjs';
 
 export function installDetailedMaterials(m,ready=()=>{}){
- m.wood.color.set('#ddd2be');m.stone.color.set('#e5e3d7');m.roof.color.set('#d5cabb');m.rock.color.set('#c4c6bc');
+ m.wood.color.set('#eee0c6');m.stone.color.set('#ede5d4');m.roof.color.set('#e5d4b9');m.rock.color.set('#dad2bd');
  const atlasState={texture:{value:m.wood.map},loaded:{value:0}},wind={value:0};
- m.road=m.stone.clone();m.road.color.set('#b9b2a0');m.road.roughness=1;
+ m.road=m.stone.clone();m.road.color.set('#cfc3a9');m.road.roughness=1;
  const tiles=[[m.wood,0,.5],[m.darkWood,0,.5],[m.roof,.5,.5],[m.stone,0,0],[m.rock,0,0],[m.road,0,0]];
  for(const [material,x,y]of tiles){material.onBeforeCompile=shader=>{shader.uniforms.uSurfaceAtlas=atlasState.texture;shader.uniforms.uAtlasLoaded=atlasState.loaded;shader.uniforms.uSurfaceOffset={value:new T.Vector2(x,y)};shader.fragmentShader='uniform sampler2D uSurfaceAtlas; uniform float uAtlasLoaded; uniform vec2 uSurfaceOffset;\n'+shader.fragmentShader;
    shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',`#ifdef USE_MAP
@@ -18,9 +18,9 @@ export function installDetailedMaterials(m,ready=()=>{}){
  m.ground.onBeforeCompile=shader=>{shader.uniforms.uSurfaceAtlas=atlasState.texture;shader.uniforms.uAtlasLoaded=atlasState.loaded;shader.uniforms.uAlpineSurface={value:m.alpineTexture};shader.vertexShader='varying vec3 vTerrainWorld; varying vec3 vTerrainNormal;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvTerrainWorld=(modelMatrix*vec4(position,1.0)).xyz; vTerrainNormal=normalize(mat3(modelMatrix)*normal);');shader.fragmentShader='uniform sampler2D uSurfaceAtlas; uniform sampler2D uAlpineSurface; uniform float uAtlasLoaded; varying vec3 vTerrainWorld; varying vec3 vTerrainNormal;\n'+shader.fragmentShader;
   shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',`#ifdef USE_MAP
    vec2 groundUv=vTerrainWorld.xz*.38;
-   vec3 meadow=texture2D(uSurfaceAtlas,vec2(.503,.003)+fract(groundUv)*.494).rgb*3.6;
-   vec3 meadow2=texture2D(uSurfaceAtlas,vec2(.503,.003)+fract(groundUv*.43+vec2(.31,.73))*.494).rgb*3.6;
-   vec3 stone=texture2D(uSurfaceAtlas,vec2(.003)+fract(vTerrainWorld.xz*.55+vTerrainWorld.yy*.2)*.494).rgb*1.9;
+   vec3 meadow=texture2D(uSurfaceAtlas,vec2(.503,.003)+fract(groundUv)*.494).rgb*vec3(3.45,3.85,3.25);
+   vec3 meadow2=texture2D(uSurfaceAtlas,vec2(.503,.003)+fract(groundUv*.43+vec2(.31,.73))*.494).rgb*vec3(3.45,3.85,3.25);
+   vec3 stone=texture2D(uSurfaceAtlas,vec2(.003)+fract(vTerrainWorld.xz*.55+vTerrainWorld.yy*.2)*.494).rgb*vec3(2.06,1.95,1.74);
    float steep=smoothstep(.09,.36,1.-abs(normalize(vTerrainNormal).y))*smoothstep(1.,3.,vTerrainWorld.y);
    vec3 detailedGround=mix(mix(meadow,meadow2,.3),stone,steep);
    vec3 originalGround=texture2D(map,vMapUv).rgb;
@@ -91,7 +91,7 @@ export function makeSky(){
  varying vec3 vDirection;uniform float uTime;uniform float uCold;uniform vec3 uHorizon;
  float skyHash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
  float skyNoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(skyHash(i),skyHash(i+vec2(1.,0.)),f.x),mix(skyHash(i+vec2(0.,1.)),skyHash(i+vec2(1.)),f.x),f.y);}
- void main(){vec3 dir=normalize(vDirection);float up=max(0.,dir.y);vec3 blue=mix(vec3(.24,.38,.48),vec3(.35,.42,.46),uCold);vec3 color=mix(uHorizon,blue,smoothstep(0.,.65,up));vec2 p=dir.xz/(up+.24)*2.4+vec2(uTime*.002,0.);float clouds=skyNoise(p)*.52+skyNoise(p*2.03)*.27+skyNoise(p*4.07)*.14+skyNoise(p*8.13)*.07;float cloud=smoothstep(.48,.70,clouds)*smoothstep(.025,.20,up);color=mix(color,vec3(.82,.83,.77),cloud*.62);float sun=max(dot(dir,normalize(vec3(-22.,34.,14.))),0.);color+=vec3(1.,.76,.43)*pow(sun,48.)*.22;gl_FragColor=vec4(color,1.);}`});
+ void main(){vec3 dir=normalize(vDirection);float up=max(0.,dir.y);vec3 blue=mix(vec3(.44,.66,.83),vec3(.56,.69,.78),uCold);vec3 color=mix(uHorizon,blue,smoothstep(0.,.65,up));vec2 p=dir.xz/(up+.24)*2.4+vec2(uTime*.002,0.);float clouds=skyNoise(p)*.52+skyNoise(p*2.03)*.27+skyNoise(p*4.07)*.14+skyNoise(p*8.13)*.07;float cloud=smoothstep(.48,.70,clouds)*smoothstep(.025,.20,up);color=mix(color,vec3(.94,.96,.96),cloud*.53);float sun=max(dot(dir,normalize(vec3(-22.,34.,14.))),0.);color+=vec3(1.,.89,.64)*pow(sun,48.)*.25;gl_FragColor=vec4(color,1.);}`});
  const sky=new T.Mesh(new T.SphereGeometry(700,32,20),mat);sky.position.set(32,0,32);sky.renderOrder=-100;sky.frustumCulled=false;return sky;
 }
 
@@ -111,15 +111,15 @@ export function makeRiver(gl,scene,heightAt){
    float bedLevel=texture2D(uBed,(p-uBedOrigin)/768.).r;
    float shore=smoothstep(.47,.52,bedLevel);
    float ripple=sin(p.x*2.7+p.y*2.2+uTime*.7)*.014;
-   vec3 simple=mix(vec3(.08,.16,.145),vec3(.23,.27,.22),shore)+ripple;
-   simple=mix(simple,vec3(.46,.52,.51),uCold*.65);
+   vec3 simple=mix(vec3(.12,.28,.27),vec3(.34,.47,.36),shore)+ripple;
+   simple=mix(simple,vec3(.61,.72,.73),uCold*.65);
    float farFog=1.-exp(-pow(length(uEye-vWorld)*.0027,2.));
    gl_FragColor=vec4(mix(simple,uSky,farFog),1.);return;
   }
   float w=waves(p);float dx=(waves(p+vec2(.025,0.))-w)/.025;float dz=(waves(p+vec2(0.,.025))-w)/.025;vec3 normal=normalize(vec3(-dx*.04,1.,-dz*.04));vec3 eye=normalize(uEye-vWorld);vec3 sun=normalize(vec3(-22.,34.,14.));float fres=pow(1.-max(dot(eye,normal),0.),3.);float spec=pow(max(dot(reflect(-sun,normal),eye),0.),240.);float depth=max(.01,.035-(texture2D(uBed,(p-uBedOrigin)/768.).r*2.-1.));
- vec3 color=mix(vec3(.18,.24,.15),vec3(.055,.13,.115),smoothstep(0.,.9,depth));float caustic=pow(.5+.5*sin(p.x*19.+w*5.+uTime)*sin(p.y*22.-uTime*.65),5.);color+=vec3(.14,.17,.09)*caustic*(1.-smoothstep(.1,.65,depth));
+ vec3 color=mix(vec3(.29,.42,.29),vec3(.10,.25,.23),smoothstep(0.,.9,depth));float caustic=pow(.5+.5*sin(p.x*19.+w*5.+uTime)*sin(p.y*22.-uTime*.65),5.);color+=vec3(.14,.17,.09)*caustic*(1.-smoothstep(.1,.65,depth));
  vec2 reflectUV=vReflect.xy/max(vReflect.w,.0001)+normal.xz*.016;vec3 reflection=texture2D(uReflection,clamp(reflectUV,vec2(.002),vec2(.998))).rgb;color=mix(color,mix(uSky*.6,reflection,uReflect),.22+fres*.56);
- float shore=1.-smoothstep(.025,.22,depth);float foam=smoothstep(.45,.78,sin(p.y*28.+p.x*15.+uTime)*.25+sin(p.y*12.-uTime*.4)*.25+.5)*shore;color=mix(color,vec3(.55,.57,.45),foam*.2);color+=vec3(1.,.87,.57)*spec*1.2;color=mix(color,vec3(.48,.58,.57)+w*.03,uCold*.6);float fog=1.-exp(-pow(length(uEye-vWorld)*.0027,2.));color=mix(color,uSky,fog);gl_FragColor=vec4(color,1.);
+ float shore=1.-smoothstep(.025,.22,depth);float foam=smoothstep(.45,.78,sin(p.y*28.+p.x*15.+uTime)*.25+sin(p.y*12.-uTime*.4)*.25+.5)*shore;color=mix(color,vec3(.55,.57,.45),foam*.2);color+=vec3(1.,.87,.57)*spec*1.2;color=mix(color,vec3(.60,.72,.72)+w*.03,uCold*.6);float fog=1.-exp(-pow(length(uEye-vWorld)*.0027,2.));color=mix(color,uSky,fog);gl_FragColor=vec4(color,1.);
  }`});
  const geo=new T.PlaneGeometry(span,span);geo.rotateX(-Math.PI/2);mesh=new T.Mesh(geo,mat);mesh.position.set(32,.035,32);scene.add(mesh);
  const camera=new T.PerspectiveCamera(),direction=new T.Vector3(),look=new T.Vector3(),clip=new T.Plane(new T.Vector3(0,1,0),-.04),bias=new T.Matrix4().set(.5,0,0,.5,0,.5,0,.5,0,0,.5,.5,0,0,0,1);
