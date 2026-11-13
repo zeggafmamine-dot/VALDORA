@@ -1,5 +1,7 @@
 # Valdora
 
+**Jugar la versión actualizada:** https://zeggafmamine-dot.github.io/VALDORA/ (redirige a la aplicación en `dist/`). El juego original de ChatGPT Sites no se sincroniza con GitHub; para ver estas mejoras utiliza esta edición publicada en GitHub Pages.
+
 Juego original de construcción y supervivencia inspirado en los city builders de aldeas. Interfaz en español, renderizado 3D WebGL 2 con Three.js r180 incluido en el proyecto, sin servicios externos. Modelos originales y materiales de madera, tejas, piedra y hierba generados para el juego. La vista 2D anterior queda como modo de compatibilidad para dispositivos sin WebGL 2.
 
 ## Jugar
