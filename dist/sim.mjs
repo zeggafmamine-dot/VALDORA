@@ -158,13 +158,59 @@ export class World{
    if(b&&hash(c.id,Math.floor(time/4))>.3){tx=b.x+b.w;ty=b.y+b.h-1;}else{const r=hash(c.id+Math.floor(time/3),this.totalDays,this.seedNumber);tx=26+Math.floor(r*12);ty=28+Math.floor(hash(c.id,Math.floor(time/2))*11);}
    c.path=this.findPath(c.x,c.y,tx,ty);c.wait=c.path.length?0:2;
   }}
- serialize(){return {version:1,terrainVersion:this.terrainVersion,coordinates:this.coordinates,seed:this.seed,day:this.day,year:this.year,season:this.season,resources:this.resources,health:this.health,happiness:this.happiness,nextId:this.nextId,buildings:this.buildings,citizens:this.citizens.map(c=>({...c,path:[]})),events:this.events,gatherQueue:this.gatherQueue,milestones:this.milestones,history:this.history,totalDays:this.totalDays,starveDays:this.starveDays,coldDays:this.coldDays,gameOver:this.gameOver,won:this.won,tiles:this.tiles.map(t=>({tree:t.tree,rock:t.rock,road:t.road,bridge:t.bridge,bridgeAxis:t.bridgeAxis,marked:t.marked}))};}
- restore(data){const validInt=(n,min,max)=>Number.isInteger(n)&&n>=min&&n<=max;
-  if(data.version!==1||![undefined,1,2].includes(data.terrainVersion)||(data.terrainVersion===2&&!validCoordinates(data.coordinates))||data.tiles?.length!==SIZE*SIZE||!Array.isArray(data.buildings)||data.buildings.length>SIZE*SIZE||!Array.isArray(data.citizens)||data.citizens.length>500||!data.resources||!Object.keys(RESOURCES).every(k=>Number.isFinite(data.resources[k])&&data.resources[k]>=0)||!validInt(data.day,1,30)||!validInt(data.year,1,100000)||!validInt(data.season,0,3)||!validInt(data.nextId,1,10000000)||!validInt(data.totalDays,0,12000000)||![data.health,data.happiness].every(n=>Number.isFinite(n)&&n>=0&&n<=100))throw Error('Partida no válida');
-  const ids=new Set();for(const b of data.buildings){const d=BUILDINGS[b.type];if(!d||!validInt(b.id,1,10000000)||ids.has(b.id)||b.w!==d.w||b.h!==d.h||!validInt(b.x,0,SIZE-b.w)||!validInt(b.y,0,SIZE-b.h)||!Number.isFinite(b.progress)||b.progress<0||b.progress>1||!validInt(b.workers,0,d.maxWorkers))throw Error('Edificio no válido');ids.add(b.id);}
-  if(!data.citizens.every(c=>validInt(c.id,1,10000000)&&typeof c.name==='string'&&c.name.length<80&&validInt(c.age,0,150)&&Number.isFinite(c.x)&&Number.isFinite(c.y)&&c.x>=0&&c.x<SIZE&&c.y>=0&&c.y<SIZE&&/^#[0-9a-f]{6}$/i.test(c.color)))throw Error('Habitante no válido');
-  if(!Array.isArray(data.events)||!data.events.every(e=>typeof e.text==='string'&&e.text.length<1000&&typeof e.date==='string'&&['info','welcome','success','danger','season','milestone'].includes(e.type))||!Array.isArray(data.gatherQueue)||!data.gatherQueue.every(q=>validInt(q.x,0,SIZE-1)&&validInt(q.y,0,SIZE-1)&&Number.isFinite(q.progress))||!Array.isArray(data.milestones)||!data.milestones.every(g=>['food','wood','winter','village'].includes(g))||!Array.isArray(data.history))throw Error('Partida no válida');
-  for(const k of ['day','year','season','resources','health','happiness','nextId','buildings','citizens','events','gatherQueue','milestones','history','totalDays','starveDays','coldDays','gameOver','won'])if(data[k]!==undefined)this[k]=data[k];
-  this.tiles.forEach((t,i)=>{for(const k of ['tree','rock','road','bridge','marked'])t[k]=data.tiles[i][k]===true;t.bridgeAxis=['x','y'].includes(data.tiles[i].bridgeAxis)?data.tiles[i].bridgeAxis:undefined;});for(const b of this.buildings)this.occupy(b);for(const c of this.citizens){c.path=[];c.wait=0;}this.assignJobs();this.speed=0;
+ serialize(){
+  const common={terrainVersion:this.terrainVersion,coordinates:this.coordinates,seed:this.seed,day:this.day,year:this.year,season:this.season,resources:this.resources,health:this.health,happiness:this.happiness,nextId:this.nextId,buildings:this.buildings,citizens:this.citizens.map(c=>({...c,path:[]})),events:this.events,gatherQueue:this.gatherQueue,milestones:this.milestones,history:this.history,totalDays:this.totalDays,starveDays:this.starveDays,coldDays:this.coldDays,gameOver:this.gameOver,won:this.won};
+  if(this.terrainVersion===3)return {...common,version:2,tileChanges:this.chunks.exportChanges(),viewRegion:this.viewRegion,cameraPosition:this.cameraPosition||null};
+  return {...common,version:1,tiles:this.tiles.map(t=>({tree:t.tree,rock:t.rock,road:t.road,bridge:t.bridge,bridgeAxis:t.bridgeAxis,marked:t.marked}))};
  }
+ restore(data){
+  const validInt=(n,min,max)=>Number.isSafeInteger(n)&&n>=min&&n<=max;
+  const sparse=data.version===2&&this.terrainVersion===3;
+  const old=data.version===1&&Array.isArray(data.tiles)&&data.tiles.length===SIZE*SIZE;
+  const cap=this.terrainVersion===3?100000000:SIZE;
+  if((!sparse&&!old)||![undefined,1,2,3].includes(data.terrainVersion)||
+   (this.terrainVersion===3&&!validCoordinates(data.coordinates))||
+   (sparse&&(!Array.isArray(data.tileChanges)||data.tileChanges.length>500000))||
+   !Array.isArray(data.buildings)||data.buildings.length>100000||
+   !Array.isArray(data.citizens)||data.citizens.length>500||
+   !data.resources||!Object.keys(RESOURCES).every(k=>Number.isFinite(data.resources[k])&&data.resources[k]>=0)||
+   !validInt(data.day,1,30)||!validInt(data.year,1,100000)||!validInt(data.season,0,3)||
+   !validInt(data.nextId,1,10000000)||!validInt(data.totalDays,0,12000000)||
+   ![data.health,data.happiness].every(n=>Number.isFinite(n)&&n>=0&&n<=100))throw Error('Partida no válida');
+  const ids=new Set();
+  for(const b of data.buildings){
+   const d=BUILDINGS[b.type];
+   if(!d||!validInt(b.id,1,10000000)||ids.has(b.id)||b.w!==d.w||b.h!==d.h||
+    !validInt(b.x,this.terrainVersion===3?-cap:0,cap-b.w)||
+    !validInt(b.y,this.terrainVersion===3?-cap:0,cap-b.h)||
+    !Number.isFinite(b.progress)||b.progress<0||b.progress>1||!validInt(b.workers,0,d.maxWorkers))throw Error('Edificio no válido');
+   ids.add(b.id);
+  }
+  if(!data.citizens.every(c=>validInt(c.id,1,10000000)&&typeof c.name==='string'&&c.name.length<80&&
+   validInt(c.age,0,150)&&Number.isFinite(c.x)&&Number.isFinite(c.y)&&
+   c.x>=(this.terrainVersion===3?-cap:0)&&c.x<cap&&c.y>=(this.terrainVersion===3?-cap:0)&&c.y<cap&&
+   /^#[0-9a-f]{6}$/i.test(c.color)))throw Error('Habitante no válido');
+  if(!Array.isArray(data.events)||!data.events.every(e=>typeof e.text==='string'&&e.text.length<1000&&
+   typeof e.date==='string'&&['info','welcome','success','danger','season','milestone'].includes(e.type))||
+   !Array.isArray(data.gatherQueue)||!data.gatherQueue.every(q=>validInt(q.x,this.terrainVersion===3?-cap:0,cap-1)&&
+   validInt(q.y,this.terrainVersion===3?-cap:0,cap-1)&&Number.isFinite(q.progress))||
+   !Array.isArray(data.milestones)||!data.milestones.every(g=>['food','wood','winter','village'].includes(g))||
+   !Array.isArray(data.history))throw Error('Partida no válida');
+  for(const k of ['day','year','season','resources','health','happiness','nextId','buildings','citizens','events','gatherQueue','milestones','history','totalDays','starveDays','coldDays','gameOver','won'])if(data[k]!==undefined)this[k]=data[k];
+  if(sparse){this.chunks.importChanges(data.tileChanges);}
+  else this.tiles.forEach((t,i)=>{
+   const state=data.tiles[i];if(!state||typeof state!=='object')throw Error('Terreno no válido');
+   const before=[t.tree,t.rock,t.road,t.bridge,t.bridgeAxis,t.marked];
+   for(const k of ['tree','rock','road','bridge','marked'])t[k]=state[k]===true;
+   t.bridgeAxis=['x','y'].includes(state.bridgeAxis)?state.bridgeAxis:undefined;
+   if(this.terrainVersion===3&&before.some((v,j)=>v!==[t.tree,t.rock,t.road,t.bridge,t.bridgeAxis,t.marked][j]))this.rememberTile(t);
+  });
+  for(const b of this.buildings)this.occupy(b);
+  for(const c of this.citizens){c.path=[];c.wait=0;}
+  this.assignJobs();this.speed=0;
+  if(sparse&&data.viewRegion&&validInt(data.viewRegion.x,-1000000,1000000)&&validInt(data.viewRegion.y,-1000000,1000000))this.setViewRegion(data.viewRegion.x,data.viewRegion.y,true);
+  if(sparse&&data.cameraPosition&&Number.isFinite(data.cameraPosition.x)&&Number.isFinite(data.cameraPosition.y)&&
+   Math.abs(data.cameraPosition.x)<cap&&Math.abs(data.cameraPosition.y)<cap)this.cameraPosition=data.cameraPosition;
+ }
+
 }
