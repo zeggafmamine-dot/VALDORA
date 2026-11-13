@@ -20,7 +20,7 @@ export function makeMaterials(){
  const soft=texture((c,n)=>{const g=c.createRadialGradient(n/2,n/2,0,n/2,n/2,n*.49);g.addColorStop(0,'rgba(20,25,17,.38)');g.addColorStop(.5,'rgba(30,30,22,.16)');g.addColorStop(1,'rgba(30,35,25,0)');c.fillStyle=g;c.fillRect(0,0,n,n);},128);
  const smoke=texture((c,n)=>{const g=c.createRadialGradient(n/2,n/2,0,n/2,n/2,n*.48);g.addColorStop(0,'#d8d7c577');g.addColorStop(.4,'#d8d7c555');g.addColorStop(1,'#d8d7c500');c.fillStyle=g;c.fillRect(0,0,n,n);},128);
  const mat=(color,map,bump=.025)=>new T.MeshStandardMaterial({color,...(map?{map,bumpMap:map,bumpScale:bump}:{}),roughness:.93});
- const m={wood:mat('#c5b18b',wood),darkWood:mat('#6b5941',wood),bark:mat('#bbb5a5',bark,.06),stone:mat('#c2c1b3',stone,.045),plaster:mat('#e3dbc0',plaster,.025),roof:mat('#b2b1a6',roof,.035),thatch:mat('#c5b382',thatch,.04),ground:mat('#ffffff',ground,.028),dirt:mat('#c2b598',dirt,.015),soil:mat('#695c43',dirt,.035),rock:mat('#a6a79c',stone,.045),black:mat('#252c26'),iron:mat('#46453c'),window:new T.MeshStandardMaterial({color:'#bd9458',emissive:'#b87a32',emissiveIntensity:.22,roughness:.35}),fabric:mat('#a17a54',thatch,.008),redFabric:mat('#995e49',thatch,.008),wool:mat('#d4cfba'),skin:mat('#c2a07b'),trousers:mat('#4f5146'),bush:new T.MeshStandardMaterial({map:leaves,alphaTest:.45,side:T.DoubleSide,roughness:1,color:'#627b3e'}),needles:new T.MeshStandardMaterial({map:needles,alphaTest:.4,side:T.DoubleSide,roughness:1,color:'#ffffff'}),leaves:new T.MeshStandardMaterial({map:leaves,alphaTest:.43,side:T.DoubleSide,roughness:1,color:'#ffffff'}),grass:new T.MeshStandardMaterial({map:tuft,alphaTest:.45,side:T.DoubleSide,roughness:1,color:'#87945a'}),soft:new T.MeshBasicMaterial({map:soft,transparent:true,depthWrite:false,color:'#ffffff'}),smoke:new T.PointsMaterial({map:smoke,transparent:true,depthWrite:false,size:.65,sizeAttenuation:true,opacity:.5}),snow:mat('#d9ddd4')};
+ const m={wood:mat('#c5b18b',wood),darkWood:mat('#6b5941',wood),bark:mat('#bbb5a5',bark,.06),stone:mat('#c2c1b3',stone,.045),plaster:mat('#e3dbc0',plaster,.025),roof:mat('#b2b1a6',roof,.035),thatch:mat('#c5b382',thatch,.04),ground:mat('#ffffff',ground,.028),dirt:mat('#c2b598',dirt,.015),soil:mat('#695c43',dirt,.035),rock:mat('#a6a79c',stone,.045),black:mat('#252c26'),iron:mat('#46453c'),window:new T.MeshStandardMaterial({color:'#bd9458',emissive:'#b87a32',emissiveIntensity:.22,roughness:.35}),fabric:mat('#a17a54',thatch,.008),redFabric:mat('#995e49',thatch,.008),wool:mat('#d4cfba'),skin:mat('#c2a07b'),trousers:mat('#4f5146'),canopy:new T.MeshStandardMaterial({color:'#ffffff',roughness:1,flatShading:true}),bush:new T.MeshStandardMaterial({map:leaves,alphaTest:.45,side:T.DoubleSide,roughness:1,color:'#627b3e'}),needles:new T.MeshStandardMaterial({map:needles,alphaTest:.4,side:T.DoubleSide,roughness:1,color:'#ffffff'}),leaves:new T.MeshStandardMaterial({map:leaves,alphaTest:.43,side:T.DoubleSide,roughness:1,color:'#ffffff'}),grass:new T.MeshStandardMaterial({map:tuft,alphaTest:.45,side:T.DoubleSide,roughness:1,color:'#87945a'}),soft:new T.MeshBasicMaterial({map:soft,transparent:true,depthWrite:false,color:'#ffffff'}),smoke:new T.PointsMaterial({map:smoke,transparent:true,depthWrite:false,size:.65,sizeAttenuation:true,opacity:.5}),snow:mat('#d9ddd4')};
  m.crop=new T.MeshStandardMaterial({map:tuft,alphaTest:.4,side:T.DoubleSide,roughness:1,color:'#b9a35d'});m.ground.vertexColors=true;ground.repeat.set(48,48);return m;
 }
 
@@ -82,6 +82,21 @@ export function citizenModel(m,color){const g=new T.Group(),shirt=new T.MeshStan
 // Leaf cards have real alpha-cut needle / leaf textures, rather than cone crowns.
 export function treeModel(m,variant=0){const g=new T.Group(),pine=variant!==2,height=pine?3.7:3.1;
  beam(g,m.bark,[0,0,0],[.04,height*.9,0],pine?.07:.105);
+ // Las hojas recortadas sobre planos pueden quedarse de canto al inclinar
+ // la cámara. Un núcleo de pocos polígonos da volumen desde cualquier ángulo.
+ if(pine){
+  const core=new T.Mesh(new T.ConeGeometry(.66,2.65,7,1),m.canopy);
+  core.position.set(0,2.02,0);core.rotation.y=variant*.41;
+  core.castShadow=core.receiveShadow=true;g.add(core);
+ }else{
+  const lobes=[[0,2.15,0,.78,.74,.78],[-.51,2.10,.19,.55,.60,.53],[.48,2.17,-.27,.57,.55,.56],[.16,2.48,.34,.54,.49,.50]];
+  const geo=new T.IcosahedronGeometry(1,0);
+  for(const [x,y,z,sx,sy,sz] of lobes){
+   const core=new T.Mesh(geo,m.canopy);
+   core.position.set(x,y,z);core.scale.set(sx,sy,sz);
+   core.castShadow=core.receiveShadow=true;g.add(core);
+  }
+ }
  if(pine){for(let ring=0;ring<9;ring++){const y=.55+ring*.35,r=(1-ring/10)*1.02;for(let a=0;a<9;a++){const angle=a/9*Math.PI*2+ring*.79+variant*.45,dx=Math.cos(angle),dz=Math.sin(angle),len=r*(.75+hash(a,ring+variant)*.3);beam(g,m.bark,[0,y,0],[dx*len,y-.14,dz*len],.018*(1-ring/11));const right=new T.Vector3(-dz,0,dx).multiplyScalar(len*.48);const root=new T.Vector3(dx*.03,y+.1,dz*.03),tip=new T.Vector3(dx*len,y-.12,dz*len);quad(g,m.needles,[root.clone().sub(right).toArray(),tip.clone().sub(right.clone().multiplyScalar(.75)).toArray(),tip.clone().add(right.clone().multiplyScalar(.75)).toArray(),root.clone().add(right).toArray()]);const vertical=[new T.Vector3(0,y-.15,0),new T.Vector3(dx*len,y-.3,dz*len),new T.Vector3(dx*len,y+.08,dz*len),new T.Vector3(0,y+.25,0)];quad(g,m.needles,vertical.map(p=>p.toArray()));}}
  }else{for(let i=0;i<22;i++){const angle=i*2.399,y=1.2+hash(i,5)*1.6,r=.35+hash(i,6)*.65,x=Math.cos(angle)*r,z=Math.sin(angle)*r;beam(g,m.bark,[0,.7,0],[x,y,z],.03);for(let j=0;j<3;j++){const o=new T.Mesh(new T.PlaneGeometry(.85+hash(i,j)*.5,.75+hash(j,i)*.5),m.leaves);o.position.set(x,y,z);o.rotation.set(.2+hash(i,j)*.65,j/3*Math.PI+angle,hash(j,i)*.2);g.add(o);}}}
  return mergeByMaterial(g);
