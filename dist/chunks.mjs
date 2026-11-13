@@ -1,7 +1,7 @@
 import {stoneCapacity,stoneRemaining,MAX_STONE_PER_TILE} from './stone-deposits.mjs';
 // Cache acotada de sectores. El mundo es determinista; solo se guardan las modificaciones del jugador.
 export const CHUNK_SIZE=64;
-export const CHUNK_LIMIT=36;
+export const CHUNK_LIMIT=24;
 export const VIEW_SIZE=64;
 const key=(x,y)=>x+','+y;
 const valid=n=>Number.isSafeInteger(n)&&Math.abs(n)<Number.MAX_SAFE_INTEGER/4;
@@ -47,10 +47,10 @@ export class ChunkStore{
   for(let y=ry*VIEW_SIZE;y<(ry+1)*VIEW_SIZE;y++)for(let x=rx*VIEW_SIZE;x<(rx+1)*VIEW_SIZE;x++)tiles.push(this.tile(x,y));
   this.queueNearby();this.trim();return tiles;
  }
- // Se preparan gradualmente los sectores vecinos antes de que lleguen a la cámara.
+ // Solo se precarga el primer anillo de vecinos; no se genera el segundo anillo innecesariamente.
  queueNearby(){
   this.pending=[];this.pendingKeys=new Set();
-  for(let radius=1;radius<=2;radius++)for(let dy=-radius;dy<=radius;dy++)for(let dx=-radius;dx<=radius;dx++){
+  for(let radius=1;radius<=1;radius++)for(let dy=-radius;dy<=radius;dy++)for(let dx=-radius;dx<=radius;dx++){
    if(Math.max(Math.abs(dx),Math.abs(dy))!==radius)continue;
    const cx=this.region.x+dx,cy=this.region.y+dy,k=key(cx,cy);
    if(!this.cache.has(k)&&!this.pendingKeys.has(k)){this.pending.push({cx,cy});this.pendingKeys.add(k);}
@@ -61,7 +61,7 @@ export class ChunkStore{
   let done=0;
   while(done<maxChunks&&this.pending?.length){
    const {cx,cy}=this.pending.shift();this.pendingKeys.delete(key(cx,cy));
-   if(Math.abs(cx-this.region.x)>2||Math.abs(cy-this.region.y)>2||this.cache.has(key(cx,cy)))continue;
+   if(Math.abs(cx-this.region.x)>1||Math.abs(cy-this.region.y)>1||this.cache.has(key(cx,cy)))continue;
    this.getChunk(cx,cy);done++;
   }
   return done;
