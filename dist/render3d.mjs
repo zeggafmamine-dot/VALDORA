@@ -244,12 +244,15 @@ export class Renderer{
   this.rebuildBridgeHeights();
  }
  fadeObjects(roots,opacity){
-  const originals=[],clones=new Map();
+  const originals=[],clones=new Map(),states=[];
   for(const root of roots)root.traverse(obj=>{
    if(!obj.material)return;
    const original=obj.material,fade=material=>{
     if(!clones.has(material)){
-     const copy=material.clone();copy.transparent=true;copy.depthWrite=false;copy.opacity=opacity;copy.needsUpdate=true;
+     const copy=material.clone();
+     // Durante la aparición se mezcla la geometría; al terminar debe
+     // recuperarse el depth buffer, especialmente para hojas alphaTest.
+     states.push({material:copy,opacity:material.opacity,transparent:material.transparent,depthWrite:material.depthWrite});
      clones.set(material,copy);
     }
     return clones.get(material);
@@ -257,7 +260,22 @@ export class Renderer{
    obj.material=Array.isArray(original)?original.map(fade):fade(original);
    originals.push({obj,original});
   });
-  return {originals,materials:[...clones.values()]};
+  const result={originals,materials:[...clones.values()],states};
+  this.applyFadeOpacity(result,opacity);
+  return result;
+ }
+ applyFadeOpacity(fade,opacity){
+  if(!fade)return;
+  const fullyVisible=opacity>=.98;
+  for(const state of fade.states){
+   const mat=state.material,transparent=fullyVisible?state.transparent:true;
+   const depthWrite=fullyVisible?state.depthWrite:false;
+   // No recompilar en cada fotograma: solo al entrar/salir del modo opaco.
+   if(mat.transparent!==transparent||mat.depthWrite!==depthWrite){
+    mat.transparent=transparent;mat.depthWrite=depthWrite;mat.needsUpdate=true;
+   }
+   mat.opacity=state.opacity*(fullyVisible?1:opacity);
+  }
  }
  rebuildBridgeHeights(){
   if(!this.chunkVisuals)return;
@@ -323,7 +341,7 @@ export class Renderer{
     visibilityTarget(chunk.cx,chunk.cy,this.camera.x,this.camera.y,renderDistance);
    chunk.opacity=approachOpacity(chunk.opacity,target,dt);
    if(Math.abs(chunk.opacity-target)<.001)chunk.opacity=target;
-   for(const material of chunk.fade.materials)material.opacity=chunk.opacity;
+   this.applyFadeOpacity(chunk.fade,chunk.opacity);
    const distance=chunkDistance(chunk.cx,chunk.cy,this.camera.x,this.camera.y);
    if(!chunk.detail&&distance<120&&time-this.lastDetailBuild>.18){
     this.addVisualDetail(chunk);this.lastDetailBuild=time;
@@ -332,7 +350,7 @@ export class Renderer{
     const targetDetail=Math.max(0,Math.min(1,(122-distance)/42));
     chunk.detailOpacity=approachOpacity(chunk.detailOpacity,targetDetail,dt);
     if(Math.abs(chunk.detailOpacity-targetDetail)<.001)chunk.detailOpacity=targetDetail;
-    for(const material of chunk.detailFade.materials)material.opacity=chunk.opacity*chunk.detailOpacity;
+    this.applyFadeOpacity(chunk.detailFade,chunk.opacity*chunk.detailOpacity);
     if(distance>152&&chunk.detailOpacity<.003)this.removeVisualDetail(chunk);
    }
    if(target===0&&chunk.opacity<.003)this.dropVisualChunk(chunk);
