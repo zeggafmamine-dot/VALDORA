@@ -43,7 +43,7 @@ export class World{
   for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
   const noise=smooth(x/9,y/9,this.seedNumber),r=hash(x,y,this.seedNumber),center=44+Math.sin(y/7+this.seedNumber%6)*2.4+Math.cos(y/15)*2,river=Math.abs(x-center),lake=((x-46)/6)**2+((y-49)/7)**2;
   const water=river<1.8||lake<1,hill=(noise>.59&&x<23&&y<26)||(x<10&&y<14&&noise>.4),clear=Math.hypot(x-31,y-33)<8;
-  const tile={x,y,type:water?'water':hill?'hill':'grass',height:water?0:hill?7+Math.floor(noise*16):Math.floor(noise*3),variant:r,tree:!water&&!hill&&!clear&&r>(noise>.4?.35:.72),rock:!water&&!clear&&(hill?r>.45:r>.96),road:false,bridge:false,building:null,marked:false};tile.stoneLeft=tile.rock?stoneCapacity(tile):0;this.tiles.push(tile);
+  const tile={x,y,type:water?'water':hill?'hill':'grass',height:water?0:hill?7+Math.floor(noise*16):Math.floor(noise*3),variant:r,tree:!water&&!hill&&!clear&&r>(noise>.4?.35:.72),rock:!water&&!clear&&(hill?r>.45:r>.96),road:false,bridge:false,building:null,marked:false};tile.stoneLeft=tile.rock?stoneCapacity(tile):0;tile.stoneScar=false;this.tiles.push(tile);
  }}
  // Las casillas usan coordenadas globales; solo el primer asentamiento tiene un claro inicial.
  proceduralTile(x,y){
@@ -52,7 +52,7 @@ export class World{
   const r=hash(gx,gy,this.seedNumber),clear=Math.hypot(x-31.5,y-32.5)<9.5;
   const type=ground.water?'water':ground.hill?'hill':'grass';
   const density=(.17+ground.moisture*.64)*(ground.height>1.5?.55:1);
-  const tile={x,y,type,height:ground.water?0:ground.hill?7+Math.floor(ground.height*2):Math.max(0,Math.floor(ground.height*1.3)),variant:r,tree:type==='grass'&&!clear&&r<density,rock:!ground.water&&!clear&&(ground.hill?r>.35:r>.97),road:false,bridge:false,building:this.buildingCells.get(x+','+y)||null,marked:false};tile.stoneLeft=tile.rock?stoneCapacity(tile):0;return tile;
+  const tile={x,y,type,height:ground.water?0:ground.hill?7+Math.floor(ground.height*2):Math.max(0,Math.floor(ground.height*1.3)),variant:r,tree:type==='grass'&&!clear&&r<density,rock:!ground.water&&!clear&&(ground.hill?r>.35:r>.97),road:false,bridge:false,building:this.buildingCells.get(x+','+y)||null,marked:false};tile.stoneLeft=tile.rock?stoneCapacity(tile):0;tile.stoneScar=false;return tile;
  }
  setViewRegion(x,y,force=false){
   if(this.terrainVersion!==3)return false;
@@ -138,7 +138,7 @@ export class World{
    if(!t)break;
    const mined=Math.min(toMine,stoneRemaining(t));
    if(mined<=0)break;
-   t.stoneLeft=stoneRemaining(t)-mined;t.rock=t.stoneLeft>0;
+   t.stoneLeft=stoneRemaining(t)-mined;t.stoneScar=true;t.rock=t.stoneLeft>0;
    if(!t.rock){t.marked=false;b.targetStone=null;this.gatherQueue=this.gatherQueue.filter(q=>q.x!==t.x||q.y!==t.y);}
    this.rememberTile(t);extracted+=mined;toMine-=mined;
   }
@@ -164,7 +164,7 @@ export class World{
   if(unfinished.length&&builders>0){let effort=builders/2;for(const b of unfinished){const d=BUILDINGS[b.type],needed=(1-b.progress)*d.days,use=Math.min(effort,needed);b.progress=Math.min(1,b.progress+use/d.days);effort-=use;if(b.progress>=.99999){b.progress=1;b.workers=Math.min(d.maxWorkers,Math.max(0,this.idle-1));this.assignJobs();this.log(`${d.name}: construcción terminada.`,'success');}if(effort<=0)break;}}
   if(builders>0&&this.gatherQueue.length){const q=this.gatherQueue[0];q.progress+=builders*.5;if(q.progress>=1){const t=this.tile(q.x,q.y);if(t?.tree){this.resources.wood+=12;t.tree=false;}if(t?.rock){
     const extracted=Math.min(10,stoneRemaining(t),Math.max(0,this.storage-this.resources.stone));
-    this.resources.stone+=extracted;t.stoneLeft=stoneRemaining(t)-extracted;t.rock=t.stoneLeft>0;
+    this.resources.stone+=extracted;t.stoneLeft=stoneRemaining(t)-extracted;t.stoneScar=t.stoneScar||extracted>0;t.rock=t.stoneLeft>0;
    }
    if(t){t.marked=!!t.rock;this.rememberTile(t);}
    if(t?.rock){q.progress=0;}else this.gatherQueue.shift();}}
@@ -220,7 +220,7 @@ export class World{
  serialize(){
   const common={terrainVersion:this.terrainVersion,coordinates:this.coordinates,seed:this.seed,day:this.day,year:this.year,season:this.season,resources:this.resources,health:this.health,happiness:this.happiness,nextId:this.nextId,buildings:this.buildings,citizens:this.citizens.map(c=>({...c,path:[]})),events:this.events,gatherQueue:this.gatherQueue,milestones:this.milestones,history:this.history,totalDays:this.totalDays,starveDays:this.starveDays,coldDays:this.coldDays,gameOver:this.gameOver,won:this.won};
   if(this.terrainVersion===3)return {...common,version:2,tileChanges:this.chunks.exportChanges(),viewRegion:this.viewRegion,cameraPosition:this.cameraPosition||null};
-  return {...common,version:1,tiles:this.tiles.map(t=>({tree:t.tree,rock:t.rock,stoneLeft:stoneRemaining(t),road:t.road,bridge:t.bridge,bridgeAxis:t.bridgeAxis,marked:t.marked}))};
+  return {...common,version:1,tiles:this.tiles.map(t=>({tree:t.tree,rock:t.rock,stoneLeft:stoneRemaining(t),stoneScar:!!t.stoneScar,road:t.road,bridge:t.bridge,bridgeAxis:t.bridgeAxis,marked:t.marked}))};
  }
  restore(data){
   const validInt=(n,min,max)=>Number.isSafeInteger(n)&&n>=min&&n<=max;
@@ -262,6 +262,7 @@ export class World{
    const before=[t.tree,t.rock,t.road,t.bridge,t.bridgeAxis,t.marked];
    for(const k of ['tree','rock','road','bridge','marked'])t[k]=state[k]===true;
    t.stoneLeft=state.stoneLeft===undefined?(t.rock?stoneCapacity(t):0):state.stoneLeft;
+   t.stoneScar=state.stoneScar===true;
    if(!Number.isInteger(t.stoneLeft)||t.stoneLeft<0||t.stoneLeft>40)throw Error('Piedra no válida');
    t.rock=t.rock&&t.stoneLeft>0;
    t.bridgeAxis=['x','y'].includes(state.bridgeAxis)?state.bridgeAxis:undefined;
