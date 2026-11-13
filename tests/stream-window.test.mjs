@@ -1,49 +1,82 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {desiredChunks,visibilityTarget,approachOpacity,shouldRetire,CHUNK_WIDTH,VISUAL_RADIUS,MAX_VISUAL_CHUNKS,FULL_DETAIL_DISTANCE,FADE_OUT_DISTANCE,CAMERA_DISTANCE,DEFAULT_GRAPHICS_QUALITY,renderDistanceForZoom} from '../dist/stream-window.mjs';
+import {desiredChunks,visibilityTarget,approachOpacity,shouldRetire,CHUNK_WIDTH,
+ VISUAL_RADIUS,MAX_VISUAL_CHUNKS,FULL_DETAIL_DISTANCE,FADE_OUT_DISTANCE,FADE_BAND,
+ CAMERA_DISTANCE,DEFAULT_GRAPHICS_QUALITY,renderDistanceForZoom,AdaptiveHorizon,
+ INITIAL_HORIZON,MAX_HORIZON,MIN_HORIZON} from '../dist/stream-window.mjs';
 
-test('los sectores de 64x64 se ordenan según la cámara, no por cambios bruscos de región',()=>{
+test('sectores de 64×64 y horizonte amplio sin agrandar la zona de transición',()=>{
  assert.equal(CHUNK_WIDTH,64);
- assert.equal(VISUAL_RADIUS,8);
- assert.equal(MAX_VISUAL_CHUNKS,300);
- assert.equal(FADE_OUT_DISTANCE,170*3);
- assert.equal(CAMERA_DISTANCE,28*3);
+ assert.equal(VISUAL_RADIUS,11);
+ assert.equal(MAX_VISUAL_CHUNKS,420);
+ assert.equal(CAMERA_DISTANCE,112);
  assert.equal(DEFAULT_GRAPHICS_QUALITY,'low');
- assert.ok(renderDistanceForZoom(1)<FADE_OUT_DISTANCE,'Evita cargar terreno que no entra en la cámara normal');
- assert.equal(renderDistanceForZoom(.38),FADE_OUT_DISTANCE,'Al alejar el zoom sigue ampliando el horizonte');
- assert.ok(renderDistanceForZoom(1)>CAMERA_DISTANCE*3);
- assert.equal(FADE_OUT_DISTANCE-FULL_DETAIL_DISTANCE,74,'La transición mantiene el mismo ancho');
+ assert.equal(FADE_BAND,74);
+ assert.equal(FADE_OUT_DISTANCE-FULL_DETAIL_DISTANCE,74);
+ assert.equal(MAX_HORIZON,640);
  for(const x of [31.5,63.9,64,64.1,79,128,239]){
   const wanted=desiredChunks(x,80);
-  assert.equal(wanted.length,289);
-  assert.ok(Math.abs(wanted[0].x-Math.floor(x/64))<=1,'El sector más cercano puede estar al otro lado de una frontera');
+  assert.equal(wanted.length,529);
+  assert.ok(Math.abs(wanted[0].x-Math.floor(x/64))<=1);
   assert.ok(wanted.every(v=>Number.isFinite(v.opacity)&&v.opacity>=0&&v.opacity<=1));
  }
 });
-test('al acercarse a un borde surge progresivamente el sector siguiente',()=>{
- const far=visibilityTarget(8,0,0,32),approaching=visibilityTarget(8,0,50,32);
- const near=visibilityTarget(8,0,100,32),inside=visibilityTarget(8,0,140,32);
+test('el borde de aparición sigue a la cámara: sin salto al cruzar casillas 64×64',()=>{
+ const before=visibilityTarget(10,0,-10,32);
+ const far=visibilityTarget(10,0,0,32);
+ const approaching=visibilityTarget(10,0,50,32);
+ const near=visibilityTarget(10,0,100,32);
+ const inside=visibilityTarget(10,0,140,32);
+ assert.equal(before,0);assert.equal(far,0);
  assert.ok(far<approaching&&approaching<near&&near<=inside);
- assert.equal(far,0);
- const justBefore=visibilityTarget(8,0,63.99,32);
- const justAfter=visibilityTarget(8,0,64.01,32);
- assert.ok(Math.abs(justBefore-justAfter)<.01,'No debe existir un salto al cruzar 64');
+ assert.equal(inside,1);
+ const justBefore=visibilityTarget(10,0,63.99,32);
+ const justAfter=visibilityTarget(10,0,64.01,32);
+ assert.ok(Math.abs(justBefore-justAfter)<.01);
 });
-test('los sectores detrás de la cámara desaparecen gradualmente',()=>{
- const old=visibilityTarget(-8,0,0,32);
- const moved=visibilityTarget(-8,0,75,32);
- assert.ok(old>moved);
- assert.equal(visibilityTarget(-8,0,150,32),0);
- assert.equal(shouldRetire(-11,0,0,32),true);
- assert.equal(shouldRetire(1,0,0,32),false);
+test('al ajustar el horizonte por rendimiento el fundido sigue teniendo 74 casillas',()=>{
+ for(const horizon of [MIN_HORIZON,420,510,MAX_HORIZON]){
+  const sector=Math.floor(horizon/64);
+  const cx=sector,cy=0;
+  const d=Math.abs(cx*64+32);
+  const xBefore=d-horizon-1,xAfter=d-(horizon-FADE_BAND)+1;
+  assert.equal(visibilityTarget(cx,cy,xBefore,32,horizon),0);
+  assert.equal(visibilityTarget(cx,cy,xAfter,32,horizon),1);
+  const halfway=d-(horizon-FADE_BAND/2);
+  assert.ok(Math.abs(visibilityTarget(cx,cy,halfway,32,horizon)-.5)<.00001);
+ }
 });
-test('la opacidad cambia gradualmente entre fotogramas, sin saltar de 0 a 1',()=>{
- let alpha=0;
- const values=[];
+test('el zoom limita la carga de sectores invisibles, sin recortar la transición',()=>{
+ assert.equal(renderDistanceForZoom(1,INITIAL_HORIZON),INITIAL_HORIZON);
+ assert.equal(renderDistanceForZoom(.38,MAX_HORIZON),MAX_HORIZON);
+ assert.equal(renderDistanceForZoom(3.4,MAX_HORIZON),MIN_HORIZON);
+ assert.ok(renderDistanceForZoom(1,MAX_HORIZON)<=MAX_HORIZON);
+ assert.equal(shouldRetire(-13,0,0,32),true);
+ assert.equal(shouldRetire(-10,0,0,32),false);
+});
+test('la opacidad cambia gradualmente entre fotogramas',()=>{
+ let alpha=0;const values=[];
  for(let i=0;i<24;i++){alpha=approachOpacity(alpha,1,.016);values.push(alpha);}
  assert.ok(values[0]>0&&values[0]<.2);
  assert.ok(values.every((v,i)=>i===0||v>values[i-1]));
  assert.ok(values.at(-1)<1);
  const down=approachOpacity(alpha,0,.016);
  assert.ok(down<alpha&&down>0);
+});
+test('el mapa se amplía de forma autónoma cuando sobran FPS',()=>{
+ const horizon=new AdaptiveHorizon();
+ assert.equal(horizon.distance,INITIAL_HORIZON);
+ for(let i=0;i<1000;i++)horizon.observe(1/60);
+ assert.ok(horizon.distance>INITIAL_HORIZON);
+ assert.ok(horizon.distance<=MAX_HORIZON);
+ for(let i=0;i<4000;i++)horizon.observe(1/60);
+ assert.equal(horizon.distance,MAX_HORIZON);
+});
+test('el mapa se reduce ante bajo rendimiento, manteniendo el mínimo necesario',()=>{
+ const horizon=new AdaptiveHorizon();
+ for(let i=0;i<1000;i++)horizon.observe(1/16);
+ assert.equal(horizon.distance,MIN_HORIZON);
+ assert.equal(horizon.observe(3),MIN_HORIZON,'Al cambiar de pestaña no altera el presupuesto');
+ for(let i=0;i<1000;i++)horizon.observe(1/16);
+ assert.equal(horizon.distance,MIN_HORIZON);
 });
