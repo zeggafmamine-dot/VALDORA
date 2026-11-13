@@ -19,7 +19,7 @@ export class Renderer{
   this.viewCamera=new T.PerspectiveCamera(42,1,.15,210);
   this.sun=new T.DirectionalLight('#ffe4b7',2.5);this.sun.castShadow=true;this.sun.shadow.mapSize.set(4096,4096);this.sun.shadow.camera.left=-26;this.sun.shadow.camera.right=26;this.sun.shadow.camera.top=26;this.sun.shadow.camera.bottom=-26;this.sun.shadow.camera.near=.1;this.sun.shadow.camera.far=130;this.sun.shadow.bias=-.00025;this.sun.shadow.normalBias=.035;this.sun.shadow.radius=2;this.scene.add(this.sun,this.sun.target);
   this.hemi=new T.HemisphereLight('#dce4ed','#696849',1.25);this.scene.add(this.hemi);
-  this.materials=makeMaterials();this.detail=installDetailedMaterials(this.materials,()=>{this.gl.shadowMap.needsUpdate=true;});this.post=createPostprocessing(this.gl,1,1);this.sky=makeSky();this.scene.add(this.sky);this.staticGroup=new T.Group();this.scene.add(this.staticGroup);this.buildingsGroup=new T.Group();this.scene.add(this.buildingsGroup);this.villagersGroup=new T.Group();this.scene.add(this.villagersGroup);this.treeInstances=[];this.rockInstances=null;this.chunkVisuals=null;this.lastVisualBuild=-100;this.lastVisualTime=0;this.lastPrefetch=0;
+  this.materials=makeMaterials();this.detail=installDetailedMaterials(this.materials,()=>{this.gl.shadowMap.needsUpdate=true;});this.post=createPostprocessing(this.gl,1,1);this.sky=makeSky();this.scene.add(this.sky);this.staticGroup=new T.Group();this.scene.add(this.staticGroup);this.buildingsGroup=new T.Group();this.scene.add(this.buildingsGroup);this.villagersGroup=new T.Group();this.scene.add(this.villagersGroup);this.treeInstances=[];this.rockInstances=null;this.chunkVisuals=null;this.lastVisualBuild=-100;this.lastDetailBuild=-100;this.lastVisualTime=0;this.lastPrefetch=0;
   this.selectionMat=new T.MeshBasicMaterial({color:'#e6cf8e',transparent:true,opacity:.32,depthWrite:false,side:T.DoubleSide});this.placementMat=this.selectionMat.clone();this.placement=new T.Mesh(new T.PlaneGeometry(1,1),this.placementMat);this.placement.rotation.x=-Math.PI/2;this.placement.renderOrder=10;this.placement.visible=false;this.scene.add(this.placement);this.selection=this.placement.clone();this.selection.material=this.selectionMat;this.scene.add(this.selection);
   this.ghost=null;this.ghostType=null;this.selectedRing=new T.LineLoop(new T.BufferGeometry(),new T.LineBasicMaterial({color:'#e9d5a3',transparent:true,opacity:.8}));this.scene.add(this.selectedRing);
   this.smokeGeo=new T.BufferGeometry();this.smokePos=new Float32Array(500*3);this.smokeGeo.setAttribute('position',new T.BufferAttribute(this.smokePos,3));this.smokeGeo.setDrawRange(0,0);this.smoke=new T.Points(this.smokeGeo,this.materials.smoke);this.smoke.frustumCulled=false;this.scene.add(this.smoke);
@@ -73,7 +73,7 @@ export class Renderer{
   const names=['staticGroup','terrain','treeInstances','knownTrees','grassTiles','grassInst','rockTiles','rockInstances','roadsGroup','bridgeHeights'];
   const before=Object.fromEntries(names.map(name=>[name,this[name]]));
   const prevTiles=this.world.renderTiles;
-  for(const name of names)this[name]=name==='staticGroup'?chunk.group:chunk[name];
+  for(const name of names)this[name]=name==='staticGroup'?(chunk.currentGroup||chunk.group):chunk[name];
   this.world.renderTiles=chunk.tiles;
   try{return work();}
   finally{
@@ -95,19 +95,42 @@ export class Renderer{
   const root=new T.Group();root.name='sector '+key;this.scene.add(root);
   const chunk={cx,cy,key,group:root,tiles:this.world.chunks.getChunk(cx,cy),terrain:null,treeInstances:[],
    knownTrees:new Set(),grassTiles:[],grassInst:null,rockTiles:[],rockInstances:null,
-   roadsGroup:null,bridgeHeights:new Map(),opacity:alpha,fade:null,signature:''};
+   roadsGroup:null,bridgeHeights:new Map(),opacity:alpha,fade:null,signature:'',detail:false,detailGroup:null,detailFade:null,detailOpacity:0,currentGroup:null};
   try{
-   this.scopeVisualChunk(chunk,()=>{
-    this.makeTerrain(cx,cy);this.makeVegetation();this.makeRocks();this.makeRoads();
-   });
+   this.scopeVisualChunk(chunk,()=>this.makeTerrain(cx,cy));
    chunk.signature=this.visualSignature(chunk.tiles);
    chunk.fade=this.fadeObjects([root],alpha);
    this.chunkVisuals.set(key,chunk);
+   if(chunkDistance(cx,cy,this.camera.x,this.camera.y)<110)this.addVisualDetail(chunk);
    this.rebuildBridgeHeights();return chunk;
   }catch(error){
    this.scene.remove(root);this.disposeGroup(root);
    throw error;
   }
+ }
+ // Los sectores lejanos muestran el relieve primero; su vegetación aparece
+ // progresivamente al acercarse, evitando procesar bosques fuera de vista.
+ addVisualDetail(chunk){
+  if(chunk.detail)return;
+  const group=new T.Group();group.name='vegetacion y caminos';chunk.group.add(group);
+  chunk.currentGroup=group;
+  try{
+   this.scopeVisualChunk(chunk,()=>{
+    this.makeVegetation();this.makeRocks();this.makeRoads();
+   });
+   chunk.detail=true;chunk.detailGroup=group;chunk.detailOpacity=0;
+   chunk.detailFade=this.fadeObjects([group],0);
+   this.rebuildBridgeHeights();
+  }finally{chunk.currentGroup=null;}
+ }
+ removeVisualDetail(chunk){
+  if(!chunk.detail)return;
+  chunk.group.remove(chunk.detailGroup);this.disposeGroup(chunk.detailGroup);
+  for(const material of chunk.detailFade.materials)material.dispose();
+  chunk.detail=false;chunk.detailGroup=null;chunk.detailFade=null;chunk.detailOpacity=0;
+  chunk.treeInstances=[];chunk.knownTrees=new Set();chunk.grassTiles=[];chunk.grassInst=null;
+  chunk.rockTiles=[];chunk.rockInstances=null;chunk.roadsGroup=null;chunk.bridgeHeights=new Map();
+  this.rebuildBridgeHeights();
  }
  fadeObjects(roots,opacity){
   const originals=[],clones=new Map();
@@ -138,6 +161,7 @@ export class Renderer{
   this.scene.remove(chunk.group);
   this.disposeGroup(chunk.group);
   for(const material of chunk.fade.materials)material.dispose();
+  if(chunk.detailFade)for(const material of chunk.detailFade.materials)material.dispose();
   this.rebuildBridgeHeights();
  }
  clearVisualChunks(){
@@ -151,7 +175,7 @@ export class Renderer{
    this.dropVisualChunk(chunk);this.makeVisualChunk(cx,cy,opacity);
    return;
   }
-  this.scopeVisualChunk(chunk,()=>{
+  if(chunk.detail)this.scopeVisualChunk(chunk,()=>{
    this.refreshTrees();this.refreshRocks();this.refreshGrass();
   });
  }
