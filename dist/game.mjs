@@ -163,9 +163,13 @@ function setSidebarOpen(open,{persist=true}={}){
  }
 }
 setSidebarOpen(sidebarMedia.matches?false:desktopSidebarOpen,{persist:false});
-sidebarMedia.addEventListener('change',()=>{
+function restoreSidebarOnViewportChange(){
  setSidebarOpen(sidebarMedia.matches?false:desktopSidebarOpen,{persist:false});
-});
+}
+sidebarMedia.addEventListener('change',restoreSidebarOnViewportChange);
+// Algunos navegadores aplazan el evento MediaQueryList mientras WebGL
+// está cargando sectores; resize mantiene sincronizados los controles.
+window.addEventListener('resize',restoreSidebarOnViewportChange);
 $('sidebar-toggle').onclick=()=>setSidebarOpen(!isSidebarOpen());
 $('mobile-build').onclick=()=>setSidebarOpen(!isSidebarOpen());
 $('minimap').onclick=e=>{const r=e.currentTarget.getBoundingClientRect(),ox=world.terrainVersion===3?world.viewRegion.x*64:0,oy=world.terrainVersion===3?world.viewRegion.y*64:0,x=ox+(e.clientX-r.left)/r.width*64,y=oy+(e.clientY-r.top)/r.height*64;if(renderer.focus)renderer.focus(x,y);else {renderer.camera=renderer.iso(x,y);renderer.clampCamera();}};
