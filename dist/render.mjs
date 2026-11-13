@@ -3,7 +3,12 @@ import {enhanceCompatibility} from './detail2d.mjs';
 import {stoneVisualScale,stoneStage} from './stone-deposits.mjs';
 import {workArea} from './work-areas.mjs';
 const TW=54,TH=27;
-const palettes=[{grass:['#8b9c6c','#92a273','#879969','#8e9e70','#95a575','#8a9d70'],soil:'#73855d',water:['#688e8b','#6b9390','#709995','#769e98'],pine:['#476b49','#527650','#61835a'],deciduous:['#78935b','#8b9f62','#94a865']},{grass:['#929b65','#98a16a','#8e985f','#9ca774','#96a26b','#8b9964'],soil:'#788151',water:['#658f8c','#6a9591','#729e98','#7aa39a'],pine:['#42684b','#4e7452','#63835a'],deciduous:['#7e9456','#90a15c','#9ba864']},{grass:['#9a9b6e','#a3a178','#919567','#a49f72','#a8a679','#9d9c70'],soil:'#80805d',water:['#6a8d8c','#739592','#799e99','#80a49a'],pine:['#536d50','#637b55','#748a60'],deciduous:['#ae8350','#c49757','#c8a65d']},{grass:['#c1cec3','#cad4c9','#bac9bf','#c5d1c7','#d1d7ca','#c4d0c6'],soil:'#a6b9ad',water:['#809e9e','#89aaa9','#90b2b1','#98b8b4'],pine:['#778e7e','#8a9f8b','#a3b4a0'],deciduous:['#9cae98','#b1bdab','#c0c9b4']}];
+const palettes=[
+ {grass:['#99bb75','#a9cb83','#90b86d','#a1c57c','#b1d189','#98bf74'],soil:'#7e9a60',water:['#72b1b4','#78b9bd','#85c3c4','#8ecac8'],pine:['#4c8b57','#579b62','#67a770'],deciduous:['#84b663','#96c474','#a7d084']},
+ {grass:['#adbf6d','#bacc7b','#a4b767','#b5ca79','#bfd183','#a7bd70'],soil:'#88975c',water:['#6babb0','#77b7ba','#80c0c0','#8bcbc5'],pine:['#478254','#548f5f','#669e6c'],deciduous:['#92ac61','#a8bf6f','#b3ca79']},
+ {grass:['#b8ae72','#c9bc7d','#afaa6d','#c8b779','#cfbf82','#b6b073'],soil:'#948d60',water:['#78a8b0','#84b2b8','#8dbdc1','#96c8c8'],pine:['#5a895e','#69986a','#7da575'],deciduous:['#c19656','#d0a766','#dab679']},
+ {grass:['#d9e6da','#e2ede0','#d4e2d5','#deebdf','#e8efe5','#d8e7db'],soil:'#bbd0c3',water:['#9bbdc7','#a5c7cf','#b1d2d8','#badcdf'],pine:['#91b69d','#a4c5ac','#b8d3b9'],deciduous:['#bed0b5','#d0dbc5','#dde5d0']}
+];
 export class Renderer{
  constructor(canvas,mini,world){this.canvas=canvas;this.ctx=canvas.getContext('2d',{alpha:false});this.mini=mini;this.mc=mini.getContext('2d');this.world=world;this.zoom=1;this.camera={x:0,y:0};this.hover=null;this.selected=null;this.buildMode=null;this.gatherMode=false;this.width=0;this.height=0;this.time=0;this.resize();this.center();if(world.cameraPosition){const p=this.iso(world.cameraPosition.x,world.cameraPosition.y);this.camera={x:p.x,y:p.y};}this.miniCache=null;this.miniKey='';enhanceCompatibility(this);}
  setWorld(w){this.world=w;this.selected=null;this.buildMode=null;this.gatherMode=false;this.center();if(w.cameraPosition){const p=this.iso(w.cameraPosition.x,w.cameraPosition.y);this.camera={x:p.x,y:p.y};}this.invalidate();}
@@ -74,14 +79,14 @@ export class Renderer{
    if(t.bridge)this.drawBridge(t);return;
   }
   const biomeColor=t.biome&&t.biome!=='water'?{
-    steppe:this.world.season===3?'#c0cbc0':'#b4ae73',
-    plain:this.world.season===3?'#c9d2c6':'#9ca97b',
-    meadow:this.world.season===3?'#c0d1bc':'#8faa6c',
-    woodland:this.world.season===3?'#aabfae':'#78935e',
-    forest:this.world.season===3?'#9fae9d':'#5a754b',
-    hills:this.world.season===3?'#adb9ae':'#81927c',
-    mountain:this.world.season===3?'#b9c5c0':'#999e93',
-    alpine:this.world.season===3?'#e7eee9':'#d1d8d0'
+    steppe:this.world.season===3?'#d5e3d4':'#c9bf7a',
+    plain:this.world.season===3?'#dbe8d9':'#acc87f',
+    meadow:this.world.season===3?'#d4e6d1':'#99c570',
+    woodland:this.world.season===3?'#b9d4bd':'#77ad62',
+    forest:this.world.season===3?'#b2cab2':'#558f51',
+    hills:this.world.season===3?'#c1d2c6':'#a6b28b',
+    mountain:this.world.season===3?'#dae5de':'#c4bba3',
+    alpine:this.world.season===3?'#f2f7f2':'#e3e9e3'
    }[t.biome]:null;
    const color=biomeColor||pal.grass[Math.min(5,Math.floor(r*6))];
    this.diamond(x,y,1.015,1.015,0,color);
