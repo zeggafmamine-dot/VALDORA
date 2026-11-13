@@ -1,7 +1,8 @@
 import * as T from './vendor/three.module.js';
 import {SIZE,BUILDINGS,hash} from './sim.mjs';
 import {terrainSample,REGION_SIZE} from './terrain.mjs';
-import {stoneVisualScale,stoneStage,QUARRY_RADIUS} from './stone-deposits.mjs';
+import {stoneVisualScale,stoneStage} from './stone-deposits.mjs';
+import {workArea} from './work-areas.mjs';
 import {desiredChunks,visibilityTarget,approachOpacity,shouldRetire,chunkDistance,MAX_VISUAL_CHUNKS,CAMERA_DISTANCE,DEFAULT_GRAPHICS_QUALITY,renderDistanceForZoom,AdaptiveHorizon,VISUAL_RADIUS} from './stream-window.mjs';
 import {makeMaterials,buildingModel,treeModel,constructionModel,citizenModel,animalModel,cube,beam,mergeByMaterial} from './models3d.mjs';
 import {installDetailedMaterials,makeTransport,routePreview,createPostprocessing,makeSky,makeRiver} from './visuals.mjs';
@@ -291,13 +292,14 @@ export class Renderer{
  pickBuilding(sx,sy){const hits=this.ray(sx,sy).intersectObjects([...this.buildingMeshes.values()],true);for(const hit of hits){let o=hit.object;while(o&&!o.userData.buildingId)o=o.parent;if(o?.userData.buildingId)return o.userData.buildingId;}const t=this.pick(sx,sy);return this.world.tile(t.x,t.y)?.building||null;}
  // El área coincide con el radio de extracción que utiliza la simulación.
  updateQuarryArea(building,isValid=true){
-  if(!building){this.quarryArea.visible=false;this.quarryAreaKey='';return;}
+  const area=building&&workArea(building.type);
+  if(!area){this.quarryArea.visible=false;this.quarryAreaKey='';return;}
   this.quarryArea.visible=true;
   const cx=building.x+building.w/2,cy=building.y+building.h/2;
-  const cacheKey=[cx,cy,isValid?1:0].join(':');
+  const cacheKey=[building.type,cx,cy,area.radius,isValid?1:0].join(':');
   if(cacheKey===this.quarryAreaKey)return;
   this.quarryAreaKey=cacheKey;
-  const fill=[],border=[],count=96,r=QUARRY_RADIUS,half=.26;
+  const fill=[],border=[],count=96,r=area.radius,half=.26;
   const vertex=(arr,x,y,z)=>arr.push(x,this.heightAt(x,z)+y,z);
   for(let i=0;i<count;i++){
    const a=i/count*Math.PI*2,b=(i+1)/count*Math.PI*2;
@@ -329,11 +331,12 @@ export class Renderer{
   const t=this.hover;this.placement.visible=!plan&&!!t&&(!!this.buildMode||this.gatherMode)&&!!this.world.tile(t.x,t.y);if(this.placement.visible){const d=this.buildMode?BUILDINGS[this.buildMode]:{w:1,h:1};const ok=this.buildMode?this.world.canPlace(this.buildMode,t.x,t.y).ok:(this.world.tile(t.x,t.y)?.tree||this.world.tile(t.x,t.y)?.rock);this.placementMat.color.set(ok?'#c0d48c':'#db8465');this.placement.scale.set(d.w,d.h,1);this.placement.position.set(t.x+d.w/2,Math.max(.06,this.heightAt(t.x+d.w/2,t.y+d.h/2)+.04),t.y+d.h/2);
    if(this.buildMode&&BUILDINGS[this.buildMode].days){if(this.ghostType!==this.buildMode){if(this.ghost){this.scene.remove(this.ghost);this.disposeGroup(this.ghost,true);}this.ghost=buildingModel(this.buildMode,this.materials,this.world.season);this.ghost.traverse(o=>{if(o.isMesh){o.material=new T.MeshBasicMaterial({color:'#bed296',transparent:true,opacity:.33,depthWrite:false,side:T.DoubleSide});o.castShadow=false;}});this.ghostType=this.buildMode;this.scene.add(this.ghost);}this.ghost.visible=true;this.ghost.position.copy(this.placement.position);this.ghost.traverse(o=>{if(o.isMesh)o.material.color.set(ok?'#c3d9a2':'#df987e');});}else if(this.ghost)this.ghost.visible=false;
   }else if(this.ghost)this.ghost.visible=false;
-  const preview=this.buildMode==='quarry'&&t&&this.world.tile(t.x,t.y)?{x:t.x,y:t.y,w:3,h:3}:null;
-  const quarry=preview||(b?.type==='quarry'?b:null);
-  this.updateQuarryArea(quarry,preview?this.world.canPlace('quarry',preview.x,preview.y).ok:true);
-  this.selectedRing.visible=!!b&&['gatherer','forester'].includes(b.type);
-  if(this.selectedRing.visible){const points=[];for(let i=0;i<65;i++){const a=i/64*Math.PI*2,x=b.x+b.w/2+Math.cos(a)*7,z=b.y+b.h/2+Math.sin(a)*7;points.push(new T.Vector3(x,this.heightAt(x,z)+.04,z));}this.selectedRing.geometry.dispose();this.selectedRing.geometry=new T.BufferGeometry().setFromPoints(points);}
+  const preview=this.buildMode&&workArea(this.buildMode)&&t&&this.world.tile(t.x,t.y)?
+   {type:this.buildMode,x:t.x,y:t.y,w:BUILDINGS[this.buildMode].w,h:BUILDINGS[this.buildMode].h}:null;
+  const active=preview||(b&&workArea(b.type)?b:null);
+  this.updateQuarryArea(active,preview?this.world.canPlace(preview.type,preview.x,preview.y).ok:true);
+  // El círculo general sustituye al antiguo anillo tenue y evita reconstruirlo cada fotograma.
+  this.selectedRing.visible=false;
  }
  updateSeason(){const s=this.world.season,p=seasonColors[s];this.lastSeason=s;this.scene.background.set(p.sky);this.scene.fog.color.set(p.sky);this.sun.color.set(p.sun);this.sun.intensity=s===3?1.8:2.5;this.water.material.uniforms.uCold.value=s===3?1:0;this.water.material.uniforms.uSky.value.set(p.sky);this.materials.grass.color.set(s===3?'#c3c9b8':s===2?'#9c8c58':'#8a965d');this.materials.roof.color.set(s===3?'#f1f0e7':'#d5cabb');this.sky.material.uniforms.uHorizon.value.set(p.sky);this.sky.material.uniforms.uCold.value=s===3?1:0;this.materials.thatch.color.set(s===3?'#d6d8c8':'#c5b382');if(this.chunkVisuals){for(const chunk of this.chunkVisuals.values())this.scopeVisualChunk(chunk,()=>{this.colorTerrain();if(chunk.detail)this.refreshTrees();});}else{this.colorTerrain();this.refreshTrees();}this.syncBuildings();this.miniKey='';}
  invalidate(){this.lastDay=-1;this.lastVisualKey='';this.miniKey='';}

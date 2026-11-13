@@ -10,7 +10,7 @@ page.on('console',m=>{if(m.type()==='error')errors.push('Consola: '+m.text());})
 await page.route('**/game.mjs',async route=>{
  const response=await route.fetch();
  const source=await response.text();
- await route.fulfill({status:response.status(),contentType:'text/javascript',body:source+'\nwindow.__valdoraSmoke={world,renderer,chooseBuilding,actAt,updateUI,closeSelection};'});
+ await route.fulfill({status:response.status(),contentType:'text/javascript',body:source+'\nwindow.__valdoraSmoke={world,renderer,chooseBuilding,actAt,updateUI,closeSelection,selectBuilding};'});
 });
 try{
  await page.goto('http://127.0.0.1:8765',{waitUntil:'domcontentloaded'});
@@ -123,6 +123,55 @@ try{
  assert.ok(visual.borderVertices>=400,'El borde del círculo debe ser grueso');
  assert.notEqual(visual.panelDisplay,'none','La ficha debe ser visible por CSS');
  assert.ok(visual.panelBox.width>190&&visual.panelBox.height>100);
+
+ // La cabaña recolectora deja de ser la única que expone su zona:
+ // comprobar 3D real, panel de recursos y ancho de círculo en el resto.
+ const workers=await page.evaluate(async()=>{
+  const {world,renderer,selectBuilding}=window.__valdoraSmoke;
+  const {BUILDINGS}=await import('./sim.mjs');
+  const {workArea}=await import('./work-areas.mjs');
+  const report=[];
+  world.resources.wood=450;world.resources.stone=450;
+  const kinds=['gatherer','forester','woodcutter','farm','pasture','fisher'];
+  for(const type of kinds){
+   const d=BUILDINGS[type];let site=null;
+   outer:for(let y=6;y<68;y++)for(let x=6;x<68;x++){
+    if(world.canPlace(type,x,y).ok){site={x,y};break outer;}
+   }
+   if(!site)throw Error('No hay parcela adecuada para '+type);
+   const result=world.place(type,site.x,site.y);
+   if(!result.ok||!result.building)throw Error('Error de construcción: '+type);
+   result.building.progress=1;result.building.workers=1;
+   world.assignJobs();
+   selectBuilding(result.building.id);
+   const panel=document.getElementById('selection-panel');
+   const hud=document.getElementById('quarry-inspector');
+   const info=panel.querySelector('[data-work-area]');
+   const circle=renderer.quarryArea;
+   report.push({
+    type,selected:renderer.selected===result.building.id,panelVisible:!panel.hidden&&getComputedStyle(panel).display!=='none',
+    hudVisible:!hud.hidden&&getComputedStyle(hud).display!=='none',
+    kind:info?.dataset.workType,metric:info?.querySelector('[data-work-area-value]')?.textContent,
+    note:info?.querySelector('.work-area-note')?.textContent,
+    circle:circle.visible,key:renderer.quarryAreaKey,expectedRadius:workArea(type).radius,
+    geometry:renderer.quarryBorder.geometry.getAttribute('position')?.count||0,
+    hudText:hud.textContent
+   });
+  }
+  return report;
+ });
+ for(const item of workers){
+  assert.equal(item.selected,true,item.type+' no quedó seleccionado');
+  assert.equal(item.panelVisible,true,item.type+' no muestra ficha');
+  assert.equal(item.hudVisible,true,item.type+' no muestra datos en el mapa');
+  assert.equal(item.kind,item.type,item.type+' confunde sus métricas');
+  assert.ok(item.metric.length>=2,item.type+' no muestra recursos o producción');
+  assert.equal(item.circle,true,item.type+' no muestra su círculo');
+  assert.ok(item.geometry>=400,item.type+' no dibuja contorno suficientemente grueso');
+  assert.ok(item.key.includes(':'+item.expectedRadius+':'),item.type+' usa radio equivocado '+item.key);
+  assert.ok(item.hudText.includes('Radio '+item.expectedRadius));
+ }
+ assert.match(workers.find(item=>item.type==='woodcutter').note,/no tala/);
 
  await page.waitForTimeout(1200);
  await page.keyboard.down('d');await page.waitForTimeout(1500);await page.keyboard.up('d');

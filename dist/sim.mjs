@@ -157,7 +157,14 @@ export class World{
   }
   return total;
  }
- forestAt(b,radius=7){let trees=0;for(let y=b.y-radius;y<b.y+radius;y++)for(let x=b.x-radius;x<b.x+radius;x++)if(this.tile(x,y)?.tree)trees++;return Math.min(1,trees/18);}
+ forestAt(b,radius=7){
+  // El bosque que realmente produce coincide con el círculo dibujado.
+  const cx=b.x+b.w/2,cy=b.y+b.h/2;let trees=0;
+  for(let y=Math.floor(cy-radius);y<=Math.ceil(cy+radius);y++)
+   for(let x=Math.floor(cx-radius);x<=Math.ceil(cx+radius);x++)
+    if((x+.5-cx)**2+(y+.5-cy)**2<=radius*radius&&this.tile(x,y)?.tree)trees++;
+  return Math.min(1,trees/18);
+ }
  tick(){if(this.gameOver)return;this.totalDays++;this.day++;if(this.day>30){this.day=1;this.season++;if(this.season>3){this.season=0;this.year++;}this.newSeason();}
   const before={...this.resources};
   const unfinished=this.buildings.filter(b=>b.progress<1),builders=this.builders;
@@ -174,7 +181,7 @@ export class World{
    if(b.type==='fisher')this.resources.food+=2.6*w;
    if(b.type==='pasture')this.resources.food+=2.4*w;
    if(b.type==='quarry')this.mineQuarry(b,STONE_PER_WORKER*w);
-   if(b.type==='forester'){this.resources.wood+=3*w*this.forestAt(b,8);if(this.totalDays%3===0){for(let tries=0;tries<12;tries++){let x=b.x+Math.floor(hash(this.totalDays+tries,1,this.seedNumber)*16)-8,y=b.y+Math.floor(hash(1,this.totalDays+tries,this.seedNumber)*16)-8,t=this.tile(x,y);if(t&&t.type==='grass'&&!t.building&&!t.road&&!t.rock&&!t.tree){t.tree=true;this.rememberTile(t);break;}}}}
+   if(b.type==='forester'){this.resources.wood+=3*w*this.forestAt(b,8);if(this.totalDays%3===0){for(let tries=0;tries<12;tries++){const cx=b.x+b.w/2,cy=b.y+b.h/2;let x=Math.floor(cx+(hash(this.totalDays+tries,1,this.seedNumber)*2-1)*8),y=Math.floor(cy+(hash(1,this.totalDays+tries,this.seedNumber)*2-1)*8);if((x+.5-cx)**2+(y+.5-cy)**2>64)continue;const t=this.tile(x,y);if(t&&t.type==='grass'&&!t.building&&!t.road&&!t.rock&&!t.tree){t.tree=true;this.rememberTile(t);break;}}}}
    if(b.type==='woodcutter'){const input=Math.min(this.resources.wood,2*w);this.resources.wood-=input;this.resources.firewood+=input*2.5;}
   }
   const foodNeed=this.population*.45,heatNeed=this.population*(this.season===3?.2:.025);
