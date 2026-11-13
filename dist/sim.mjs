@@ -171,8 +171,11 @@ export class World{
   // El bosque que realmente produce coincide con el círculo dibujado.
   const cx=b.x+b.w/2,cy=b.y+b.h/2;let trees=0;
   for(let y=Math.floor(cy-radius);y<=Math.ceil(cy+radius);y++)
-   for(let x=Math.floor(cx-radius);x<=Math.ceil(cx+radius);x++)
-    if((x+.5-cx)**2+(y+.5-cy)**2<=radius*radius&&isEconomicTerrain(this.tile(x,y))&&this.tile(x,y)?.tree)trees++;
+   for(let x=Math.floor(cx-radius);x<=Math.ceil(cx+radius);x++){
+    if((x+.5-cx)**2+(y+.5-cy)**2>radius*radius)continue;
+    const t=this.tile(x,y);
+    if(isEconomicTerrain(t)&&t.tree)trees++;
+   }
   return Math.min(1,trees/18);
  }
  tick(){if(this.gameOver)return;this.totalDays++;this.day++;if(this.day>30){this.day=1;this.season++;if(this.season>3){this.season=0;this.year++;}this.newSeason();}
