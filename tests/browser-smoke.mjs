@@ -192,6 +192,7 @@ try{
    quality:renderer.quality,grassCreated:!!active.grassInst,
    terrainSegments:active.terrain.geometry.parameters.widthSegments,
    waterSize:bed.image.width,waterSpan:renderer.water.geometry.parameters.width,
+   lowWaterShader:renderer.water.material.uniforms.uLow.value,
    unnecessaryChunkReads:reads
   };
  });
@@ -200,6 +201,7 @@ try{
  assert.equal(performance.terrainSegments,20,'El terreno distante debe emplear mallas más ligeras');
  assert.equal(performance.waterSize,80,'Reducir cuatro veces los muestreos del agua');
  assert.equal(performance.waterSpan,768);
+ assert.equal(performance.lowWaterShader,1,'La calidad Ligera debe utilizar el shader simplificado del agua');
  assert.equal(performance.unnecessaryChunkReads,0,'No regenerar sectores intactos entre días');
 
  await page.waitForTimeout(1200);
