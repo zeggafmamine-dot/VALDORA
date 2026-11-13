@@ -67,60 +67,123 @@ export class Renderer{
  pan(dx,dy){const scale=(28/this.zoom)*.75/Math.max(1,this.height),a=this.azimuth;this.camera.x-=Math.cos(a)*dx*scale+Math.sin(a)*dy*scale/Math.sin(this.elevation);this.camera.y-=(-Math.sin(a))*dx*scale+Math.cos(a)*dy*scale/Math.sin(this.elevation);this.clampCamera();this.updateCamera();}
  clampCamera(){if(this.world.terrainVersion!==3){this.camera.x=clamp(this.camera.x,3,SIZE-3);this.camera.y=clamp(this.camera.y,3,SIZE-3);}else{const limit=100000000;this.camera.x=clamp(this.camera.x,-limit,limit);this.camera.y=clamp(this.camera.y,-limit,limit);}}
  // Cada transición conserva el relieve anterior y mezcla lentamente la zona nueva.
+ // Un sector tiene su propia geometría, vegetación, rocas y caminos.
+ // Las geometrías no se regeneran al desplazarse al sector contiguo.
+ scopeVisualChunk(chunk,work){
+  const names=['staticGroup','terrain','treeInstances','knownTrees','grassTiles','grassInst','rockTiles','rockInstances','roadsGroup','bridgeHeights'];
+  const before=Object.fromEntries(names.map(name=>[name,this[name]]));
+  const prevTiles=this.world.renderTiles;
+  for(const name of names)this[name]=chunk[name];
+  this.world.renderTiles=chunk.tiles;
+  try{return work();}
+  finally{
+   for(const name of names){chunk[name]=this[name];this[name]=before[name];}
+   this.world.renderTiles=prevTiles;
+  }
+ }
+ visualSignature(tiles){
+  let sum=0,count=0;
+  for(const t of tiles){
+   if(t.tree){count++;sum=(sum+Math.imul(t.x+7,t.y+13)+11)|0;}
+   if(t.road)sum=(sum+Math.imul(t.x+113,t.y+7)+107)|0;
+   if(t.bridge)sum=(sum+Math.imul(t.x+17,t.y+59)+67)|0;
+  }
+  return count+':'+sum;
+ }
+ makeVisualChunk(cx,cy,alpha=0){
+  const key=cx+','+cy;if(this.chunkVisuals.has(key))return;
+  const root=new T.Group();root.name='sector '+key;this.scene.add(root);
+  const chunk={cx,cy,key,group:root,tiles:this.world.chunks.getChunk(cx,cy),terrain:null,treeInstances:[],
+   knownTrees:new Set(),grassTiles:[],grassInst:null,rockTiles:[],rockInstances:null,
+   roadsGroup:null,bridgeHeights:new Map(),opacity:alpha,fade:null,signature:''};
+  try{
+   this.scopeVisualChunk(chunk,()=>{
+    this.makeTerrain(cx,cy);this.makeVegetation();this.makeRocks();this.makeRoads();
+   });
+   chunk.signature=this.visualSignature(chunk.tiles);
+   chunk.fade=this.fadeObjects([root],alpha);
+   this.chunkVisuals.set(key,chunk);
+   this.rebuildBridgeHeights();return chunk;
+  }catch(error){
+   this.scene.remove(root);this.disposeGroup(root);
+   throw error;
+  }
+ }
  fadeObjects(roots,opacity){
   const originals=[],clones=new Map();
-  for(const root of roots){
-   root.traverse(obj=>{
-    if(!obj.material)return;
-    const original=obj.material,fade=material=>{
-     if(!clones.has(material)){
-      const copy=material.clone();copy.transparent=true;copy.depthWrite=false;copy.opacity=opacity;copy.needsUpdate=true;
-      clones.set(material,copy);
-     }
-     return clones.get(material);
-    };
-    obj.material=Array.isArray(original)?original.map(fade):fade(original);
-    originals.push({obj,original});
-   });
-  }
+  for(const root of roots)root.traverse(obj=>{
+   if(!obj.material)return;
+   const original=obj.material,fade=material=>{
+    if(!clones.has(material)){
+     const copy=material.clone();copy.transparent=true;copy.depthWrite=false;copy.opacity=opacity;copy.needsUpdate=true;
+     clones.set(material,copy);
+    }
+    return clones.get(material);
+   };
+   obj.material=Array.isArray(original)?original.map(fade):fade(original);
+   originals.push({obj,original});
+  });
   return {originals,materials:[...clones.values()]};
  }
- finishRegionReveal(){
-  const reveal=this.regionReveal;if(!reveal)return;
-  for(const {obj,original} of reveal.incoming.originals)obj.material=original;
-  for(const mat of reveal.incoming.materials)mat.dispose();
-  this.scene.remove(reveal.oldGroup,reveal.oldTerrain);
-  this.disposeGroup(reveal.oldGroup);reveal.oldTerrain.geometry.dispose();
-  for(const mat of reveal.outgoing.materials)mat.dispose();
-  this.regionReveal=null;this.gl.shadowMap.needsUpdate=true;
+ rebuildBridgeHeights(){
+  if(!this.chunkVisuals)return;
+  const heights=new Map();
+  for(const chunk of this.chunkVisuals.values())
+   for(const [cell,height] of chunk.bridgeHeights)heights.set(cell,height);
+  this.bridgeHeights=heights;
  }
- updateRegionReveal(time){
-  if(!this.regionReveal)return;
-  const fraction=revealProgress(time-this.regionReveal.started);
-  for(const mat of this.regionReveal.incoming.materials)mat.opacity=fraction;
-  for(const mat of this.regionReveal.outgoing.materials)mat.opacity=1-fraction;
-  if(fraction>=1)this.finishRegionReveal();
+ dropVisualChunk(chunk){
+  if(!this.chunkVisuals.has(chunk.key))return;
+  this.chunkVisuals.delete(chunk.key);
+  this.scene.remove(chunk.group);
+  this.disposeGroup(chunk.group);
+  for(const material of chunk.fade.materials)material.dispose();
+  this.rebuildBridgeHeights();
  }
- // Los sectores vecinos se precargan de uno en uno entre fotogramas.
+ clearVisualChunks(){
+  if(!this.chunkVisuals)return;
+  for(const chunk of [...this.chunkVisuals.values()])this.dropVisualChunk(chunk);
+ }
+ refreshVisualChunk(chunk){
+  if(this.visualSignature(chunk.tiles)!==chunk.signature){
+   const {cx,cy,opacity}=chunk;
+   this.dropVisualChunk(chunk);this.makeVisualChunk(cx,cy,opacity);
+   return;
+  }
+  this.scopeVisualChunk(chunk,()=>{
+   this.refreshTrees();this.refreshRocks();this.refreshGrass();
+  });
+ }
+ // Un horizonte de 5×5 sectores sigue a la cámara continuamente.
+ // Cada fotograma aproxima su visibilidad; se construye como máximo un sector por pasada.
+ updateVisualChunks(time){
+  if(!this.chunkVisuals)return;
+  const dt=this.lastVisualTime?Math.min(.1,Math.max(0,time-this.lastVisualTime)):.016;
+  this.lastVisualTime=time;
+  const wanted=desiredChunks(this.camera.x,this.camera.y);
+  if(time-this.lastVisualBuild>.07){
+   const next=wanted.find(item=>item.opacity>.005&&!this.chunkVisuals.has(item.key));
+   if(next){
+    this.makeVisualChunk(next.x,next.y,0);
+    this.lastVisualBuild=time;
+   }
+  }
+  for(const chunk of [...this.chunkVisuals.values()]){
+   const target=shouldRetire(chunk.cx,chunk.cy,this.camera.x,this.camera.y)?0:
+    visibilityTarget(chunk.cx,chunk.cy,this.camera.x,this.camera.y);
+   chunk.opacity=approachOpacity(chunk.opacity,target,dt);
+   if(Math.abs(chunk.opacity-target)<.001)chunk.opacity=target;
+   for(const material of chunk.fade.materials)material.opacity=chunk.opacity;
+   if(target===0&&chunk.opacity<.003)this.dropVisualChunk(chunk);
+  }
+ }
  streamRegion(){
-  if(this.world.terrainVersion!==3)return;
+  if(!this.chunkVisuals)return;
   const rx=Math.floor(this.camera.x/SIZE),ry=Math.floor(this.camera.y/SIZE);
   if(!this.world.setViewRegion(rx,ry))return;
-  this.finishRegionReveal();
-  const oldGroup=this.staticGroup,oldTerrain=this.terrain;
-  this.staticGroup=new T.Group();this.scene.add(this.staticGroup);
-  this.treeInstances=[];this.grassInst=null;this.rockInstances=null;this.roadsGroup=null;
-  this.terrain=null;
-  for(const o of this.animalMeshes){this.scene.remove(o);this.disposeGroup(o);}this.animalMeshes=[];
-  this.makeTerrain();this.makeVegetation();this.makeRocks();this.makeRoads();this.makeAnimals();
-  this.syncBuildings();this.river.refreshBed(this.heightAt.bind(this),{x:rx*SIZE+32,y:ry*SIZE+32});
-  this.regionReveal={
-   started:this.time,
-   oldGroup,oldTerrain,
-   outgoing:this.fadeObjects([oldGroup,oldTerrain],1),
-   incoming:this.fadeObjects([this.staticGroup,this.terrain],0)
-  };
-  this.linePreview=null;this.linePreviewKey='';this.lastVisualKey='';this.lastDay=-1;this.miniKey='';
+  this.river.refreshBed(this.heightAt.bind(this),{x:rx*SIZE+32,y:ry*SIZE+32});
+  this.lastVisualKey='';this.miniKey='';
+  this.syncBuildings();
  }
  ray(sx,sy){this.mouse.set(sx/this.width*2-1,1-sy/this.height*2);this.raycaster.setFromCamera(this.mouse,this.viewCamera);return this.raycaster;}
  unproject(sx,sy){const ray=this.ray(sx,sy),point=new T.Vector3();const plane=new T.Plane(new T.Vector3(0,1,0),-.58);if(!ray.ray.intersectPlane(plane,point))return {x:this.camera.x,y:this.camera.y};return {x:point.x,y:point.z};}
